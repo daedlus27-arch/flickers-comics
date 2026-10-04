@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flickers Comics</title>
+<meta name="theme-color" content="#0E1211">
+<meta property="og:title" content="Flickers Comics">
+<meta property="og:description" content="Independent comic shop. Single issues, trade paperbacks, omnibuses, manga and Funko Pops.">
+<meta property="og:image" content="assets/flickers-logo.png">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="description" content="Independent comic shop. Single issues, trade paperbacks, omnibuses, manga and Funko Pops. Order online, collect in store or get it posted.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" id="gfonts" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700;800&family=Bangers&family=Permanent+Marker&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#shop">Skip to the shelves</a>
+
+<div class="topstrip">
+  <div class="wrap topstrip-in">
+    <span class="status" id="stripStatus"><span class="status-dot" aria-hidden="true"></span><span id="stripStatusText">Open every day, 8PM – 10PM</span></span>
+    <span class="strip-extra"><span>Collect in store for free</span><span>Postage <span class="js-postage">$1,000</span></span></span>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="wrap header-in">
+    <a class="logo-link" href="#top"><img class="logo" id="logo" src="assets/flickers-logo.png" alt="Flickers Comics" width="800" height="130"></a>
+    <div class="header-actions">
+      <nav class="nav" aria-label="Main"><a href="#shop">Shop</a><a href="#how">How ordering works</a><a href="#hours">Hours</a></nav>
+      <button type="button" class="cart-btn" id="cartBtn" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>
+        <span class="cart-word">Cart</span>
+        <span class="cart-count" id="cartCount">0</span>
+        <span class="cart-total" id="cartTotal">$0</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="heroTitle">
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <p class="eyebrow">Independent comic shop</p>
+        <h1 id="heroTitle"><span class="mark">Comics</span>, manga &amp; collectibles</h1>
+        <p class="lede">Single issues, trade paperbacks, omnibuses, manga and Funko Pops. Order online, then collect at the counter or have it posted to you.</p>
+        <div class="hero-actions">
+          <a class="btn btn-yellow" href="#shop">Browse the shelves</a>
+          <a class="btn btn-plain" href="#how">How ordering works</a>
+        </div>
+        <ul class="hero-facts">
+          <li><strong>Open every day</strong> <span class="js-hours">8PM – 10PM</span></li>
+          <li><strong>Collect in store</strong> free</li>
+          <li><strong>Postage</strong> <span class="js-postage">$1,000</span></li>
+        </ul>
+      </div>
+      <div class="rack" id="rack" role="group" aria-label="New this week">
+        <span class="rack-sticker" aria-hidden="true">New this week!</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="shop" id="shop" aria-labelledby="shopTitle">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title" id="shopTitle">The shelves</h2>
+          <p class="section-sub">Tap any cover for details.</p>
+        </div>
+        <div class="tools">
+          <label class="search">
+            <span class="sr-only">Search the shelves</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" id="q" placeholder="Search titles or publishers" autocomplete="off">
+          </label>
+          <label class="sort"><span>Sort</span>
+            <select id="sort">
+              <option value="featured">Featured</option>
+              <option value="price-asc">Price: low to high</option>
+              <option value="price-desc">Price: high to low</option>
+              <option value="title">Title A–Z</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="dividers" id="dividers" role="group" aria-label="Filter by category"></div>
+      <p class="results" id="results" aria-live="polite"></p>
+      <div class="grid" id="grid"></div>
+      <div class="empty" id="empty" hidden>
+        <p class="empty-title">Nothing on this shelf</p>
+        <p>Try a different word, or <button type="button" class="link-btn" id="clearSearch">show everything</button>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="how" id="how" aria-labelledby="howTitle">
+    <div class="wrap">
+      <h2 class="section-title" id="howTitle">How ordering works</h2>
+      <p class="section-sub">Four steps from the shelf to your hands.</p>
+      <ol class="panels">
+        <li class="panel"><span class="panel-n" aria-hidden="true">1</span><h3>Fill your cart</h3><p>Add what you want from the shelves. Each title shows when stock is running low.</p></li>
+        <li class="panel"><span class="panel-n" aria-hidden="true">2</span><h3>Collect or post</h3><p>Pick a day to collect at the counter for free, or have it posted to you for <span class="js-postage">$1,000</span>.</p></li>
+        <li class="panel"><span class="panel-n" aria-hidden="true">3</span><h3>Pay from your bank</h3><p>Checkout takes you to Fleeca to pay from your bank account.</p></li>
+        <li class="panel"><span class="panel-n" aria-hidden="true">4</span><h3>We get in touch</h3><p>We text you when your order is ready to collect or on its way.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="hours" id="hours" aria-labelledby="hoursTitle">
+    <div class="wrap hours-in">
+      <div>
+        <h2 class="section-title" id="hoursTitle">Opening hours</h2>
+        <p class="big-hours js-hours">8PM – 10PM</p>
+        <p class="hours-note">Every day of the week. Collections happen during opening hours.</p>
+        <p class="status-pill" id="hoursStatus"><span class="status-dot" aria-hidden="true"></span><span id="hoursStatusText">Open every day</span></p>
+      </div>
+      <ol class="week" id="week" aria-label="This week"></ol>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-in">
+    <img class="footer-logo" id="footerLogo" alt="Flickers Comics" width="800" height="130">
+    <div class="footer-cols">
+      <div><h3>Hours</h3><p>Every day, <span class="js-hours">8PM – 10PM</span></p></div>
+      <div><h3>Orders</h3><p>Collect in store: free<br>Postage: <span class="js-postage">$1,000</span></p></div>
+      <div><h3>Payment</h3><p>Pay from your bank account<br>through Fleeca</p></div>
+    </div>
+    <p class="fine">© Flickers Comics. All prices in dollars.</p>
+  </div>
+</footer>
+
+<dialog class="qv" id="qv" aria-labelledby="qvTitle"><div id="qvBody"></div></dialog>
+
+<dialog class="drawer" id="drawer" aria-labelledby="drawerTitle">
+  <div class="drawer-head">
+    <h2 class="dialog-title" id="drawerTitle">Your cart</h2>
+    <button type="button" class="icon-btn on-dark" data-close aria-label="Close cart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="drawer-body">
+    <ul class="lines" id="lines"></ul>
+    <div class="cart-empty" id="cartEmpty" hidden>
+      <p class="empty-title">Your cart is empty</p>
+      <p class="hint">Add something from the shelves and it shows up here.</p>
+      <button type="button" class="btn btn-yellow" data-close data-goto="shop">Browse the shelves</button>
+    </div>
+  </div>
+  <div class="drawer-foot" id="drawerFoot">
+    <div class="r-line"><span>Subtotal</span><strong id="drawerSub">$0</strong></div>
+    <p class="hint">Choose collection or postage at checkout.</p>
+    <button type="button" class="btn btn-yellow btn-block" id="checkoutBtn">Checkout</button>
+  </div>
+</dialog>
+
+<dialog class="checkout" id="co" aria-labelledby="coTitle">
+  <div class="co-head">
+    <h2 class="dialog-title" id="coTitle">Checkout</h2>
+    <button type="button" class="icon-btn on-dark" data-close aria-label="Close checkout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div id="coFormView">
+    <p class="test-note" id="testNote"><strong>Test mode.</strong> Payments aren't connected yet, so test orders aren't charged and the shop isn't notified.</p>
+    <form id="coForm" novalidate>
+      <div class="co-grid">
+        <div class="co-fields">
+          <fieldset>
+            <legend>Your details</legend>
+            <div class="two">
+              <div class="field">
+                <label for="f-name">Full name</label>
+                <input id="f-name" name="name" autocomplete="name" placeholder="e.g. Jamie Reyes" aria-describedby="e-name">
+                <p class="error" id="e-name" hidden></p>
+              </div>
+              <div class="field">
+                <label for="f-phone">Phone number</label>
+                <input id="f-phone" name="phone" inputmode="tel" autocomplete="tel" placeholder="e.g. 5550142" aria-describedby="h-phone e-phone">
+                <p class="hint" id="h-phone">So we can text you about your order.</p>
+                <p class="error" id="e-phone" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>How do you want it?</legend>
+            <div class="methods">
+              <label class="method"><input type="radio" name="method" value="collect" id="m-collect" checked>
+                <span class="method-text"><span class="method-name">Collect in store</span><span class="method-price">Free</span><span class="hint">Pick it up at the counter.</span></span></label>
+              <label class="method"><input type="radio" name="method" value="post" id="m-post">
+                <span class="method-text"><span class="method-name">Post it to me</span><span class="method-price js-postage">$1,000</span><span class="hint">Sent to your address.</span></span></label>
+            </div>
+            <div class="field" id="collectPanel">
+              <label for="f-date">When can you collect?</label>
+              <input type="date" id="f-date" name="date" aria-describedby="h-date e-date">
+              <p class="hint" id="h-date">We're open 8PM – 10PM every day.</p>
+              <p class="error" id="e-date" hidden></p>
+            </div>
+            <div class="field" id="postPanel" hidden>
+              <label for="f-address">Delivery address</label>
+              <textarea id="f-address" name="address" rows="3" autocomplete="street-address" placeholder="House or apartment number, street, area" aria-describedby="e-address"></textarea>
+              <p class="error" id="e-address" hidden></p>
+            </div>
+          </fieldset>
+          <div class="field">
+            <label for="f-notes">Notes <span class="opt">(optional)</span></label>
+            <textarea id="f-notes" name="notes" rows="2" placeholder="Anything we should know?"></textarea>
+          </div>
+        </div>
+        <aside class="receipt" aria-labelledby="sumTitle">
+          <h3 id="sumTitle">Order summary</h3>
+          <ul class="sum-list" id="sumList"></ul>
+          <div class="r-line"><span>Subtotal</span><span id="sumSub">$0</span></div>
+          <div class="r-line"><span id="sumShipLabel">Collection</span><span id="sumShip">Free</span></div>
+          <div class="r-line r-total"><span>Total</span><span id="sumTotal">$0</span></div>
+        </aside>
+      </div>
+      <div class="co-foot">
+        <div class="foot-total"><span>Total</span><strong id="footTotal">$0</strong><span class="hint" id="payHint"></span></div>
+        <p class="form-error" id="formError" role="alert"></p>
+        <button type="submit" class="btn btn-yellow" id="payBtn">Place test order</button>
+      </div>
+    </form>
+  </div>
+  <div id="coDoneView" hidden></div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="shop-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
