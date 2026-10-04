@@ -1,0 +1,23 @@
+{
+  "name": "flickers-comics",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Flickers Comics storefront",
+  "scripts": {
+    "build": "node build/build.mjs",
+    "serve": "node build/serve.mjs",
+    "dev:api": "node worker/dev.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@fontsource/anton": "^5.3.0",
+    "@fontsource/archivo": "^5.3.0",
+    "@fontsource/bangers": "^5.3.0",
+    "@fontsource/permanent-marker": "^5.3.0",
+    "sharp": "^0.35.5"
+  }
+}

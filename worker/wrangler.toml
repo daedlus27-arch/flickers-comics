@@ -1,0 +1,21 @@
+# Cloudflare Worker for the staff area. Step by step setup: docs/SETUP.md
+name = "flickers-staff-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+GITHUB_REPO = "daedlus27-arch/flickers-comics"
+GITHUB_BRANCH = "main"
+# Origins allowed to call the API. Add "http://localhost:8080" while testing locally.
+ALLOWED_ORIGINS = "https://daedlus27-arch.github.io"
+
+# Create the namespace with:  npx wrangler kv namespace create USERS
+# then paste the id it prints below.
+[[kv_namespaces]]
+binding = "USERS"
+id = "PASTE_KV_NAMESPACE_ID_HERE"
+
+# Secrets are not stored in this file. Set them with `npx wrangler secret put NAME`:
+#   SESSION_SECRET   a long random string
+#   SETUP_KEY        a one-time key used to create the first owner account
+#   GITHUB_TOKEN     fine-grained GitHub token: this repo only, Contents: read and write

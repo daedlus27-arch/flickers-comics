@@ -1,42 +1,54 @@
 # Flickers Comics
 
-Storefront for Flickers Comics, an independent comic shop on GTA World. It's plain HTML, CSS and JavaScript, hosted free on GitHub Pages.
+Website for Flickers Comics, an independent comic shop on GTA World. It's a static site hosted free on
+GitHub Pages. Every comic has its own page, and staff manage stock from a password-protected staff area.
 
-## Stock manager (staff login)
+## How it fits together
 
-Click **Staff login** at the bottom of the site to add, edit or delete stock, change prices and stock counts, write descriptions and upload cover photos.
+| Part | What it does |
+| --- | --- |
+| `data/` | The shop's content: `products.json` (stock), `featured.json` ("new this week"), `config.json` (postage, hours, categories, addresses). |
+| `build/` | A small script that turns `data/` and `assets/` into the finished site in `dist/`: one page per comic, resized covers, sitemap, fonts. |
+| `src/` | The site's CSS and JavaScript (`js/site.js` is the storefront, `admin/admin.js` the staff area, `shared.mjs` is used by both and by the build). |
+| `worker/` | The staff service (Cloudflare Worker): logins and publishing. See `docs/SETUP.md`. |
+| `.github/workflows/deploy.yml` | Tests, builds and publishes the site on every push to `main`. |
+| `assets/` | Logo, icons and the original cover photos (`assets/covers/`). |
 
-1. Sign in with a GitHub access token. The login box links to GitHub with the right settings filled in (the `public_repo` box ticked). Choose an expiry, generate the token and paste it in.
-2. Make your changes. They show on the page straight away as a preview, but customers don't see them yet.
-3. Click **Publish changes**. Everything is saved to this repo in one commit, and the live site updates within a couple of minutes.
+## Changing stock
 
-To give a member of staff access, add their GitHub account under **Settings → Collaborators** on this repo. They then make their own token the same way.
+**In the staff area** (`/admin/`): sign in with your username and password, change prices and stock,
+add or edit comics, upload cover photos, then **Publish changes**. The site updates in a minute or two.
 
-Tick "Keep me signed in" only on your own computer. If a token leaks, delete it at github.com/settings/tokens.
+**By hand:** edit `data/products.json` on GitHub. One comic per line:
 
-## Changing stock by hand
+```json
+{"id":"batman-423","cat":"issues","title":"Batman","num":"#423","variant":"Facsimile Edition","publisher":"DC Comics","price":400,"stock":11,"blurb":"…","badges":["new"],"image":"assets/covers/batman-423.jpg"}
+```
 
-You can still edit **`shop-data.js`** directly on GitHub:
+- Required: `id` (lowercase letters, numbers, dashes; becomes the page address), `cat`, `title`, `price`, `stock`, `blurb`.
+- Optional: `num`, `vol`, `subtitle`, `variant`, `collects`, `pages`, `grade`, `publisher`, `tagline`, `badges` (`new`, `variant`, `exclusive`), `staff` (a staff pick note), `image`.
+- `cat` is one of `issues`, `graphic`, `tpb`, `omnibus`, `manga`, `funko`.
+- Without `image`, the comic gets a plain typographic cover. Add the photo to `assets/covers/` and set `image` to use it.
+- `data/featured.json` lists up to three ids shown at the top of the home page.
+- If something is wrong, the build stops and says what; the live site stays as it was.
 
-- `FLICKERS_PRODUCTS` has one entry per item: title, price, stock and so on. The top of the file explains every field.
-- `FLICKERS_NEW_THIS_WEEK` lists the three covers shown at the top of the page.
-- `FLICKERS_CONFIG` holds postage, opening hours and the time zone used for the "Open now" badge.
-
-To edit on GitHub, open `shop-data.js`, click the pencil icon, make your change and click **Commit changes**. The live site updates within a minute or two.
-
-To use a real photo instead of a drawn cover, upload it to `assets/covers/` and add `image: "assets/covers/your-file.jpg"` to that item.
+Opening hours, postage and the time zone used for the "Open now" badge are in `data/config.json`.
 
 ## Test mode
 
-Checkout runs in test mode (`testMode: true` in `shop-data.js`). Test orders aren't charged and nobody is notified. Once the business is approved for the GTA World banking API, a small order service gets added to take Fleeca payments and post each order to Discord. Test mode is switched off after that.
+Checkout runs in test mode (`testMode: true` in `data/config.json`). Test orders aren't charged and nobody
+is notified. Once the business is approved for the GTA World banking API, an order service takes Fleeca
+payments and posts each order to Discord (set `orderApi` in `data/config.json`), and test mode is switched off.
 
-## Files
+## Working on the site
 
-| File | What it is |
-| --- | --- |
-| `index.html` | Page layout |
-| `styles.css` | Look and feel |
-| `shop-data.js` | Stock, prices, hours, postage |
-| `app.js` | Cart, checkout and cover drawing |
-| `admin.js` | Staff login and stock manager |
-| `assets/` | Logo, icons and uploaded cover photos |
+Needs [Node.js](https://nodejs.org) 20 or newer.
+
+```bash
+npm install
+npm test            # checks the build and the staff service
+npm run build       # writes dist/
+npm run serve       # preview at http://localhost:8080
+```
+
+To try the staff area locally without Cloudflare, see the last section of `docs/SETUP.md`.

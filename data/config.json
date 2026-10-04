@@ -1,0 +1,46 @@
+{
+  "postage": 1000,
+  "openHour": 20,
+  "closeHour": 22,
+  "timeZone": "Europe/London",
+  "collectDaysAhead": 14,
+  "testMode": true,
+  "siteUrl": "https://daedlus27-arch.github.io/flickers-comics",
+  "adminApi": "",
+  "categories": [
+    {
+      "key": "all",
+      "label": "Everything"
+    },
+    {
+      "key": "issues",
+      "label": "Single Issues",
+      "one": "Single issue"
+    },
+    {
+      "key": "graphic",
+      "label": "Graphic Novels",
+      "one": "Graphic novel"
+    },
+    {
+      "key": "tpb",
+      "label": "Trade Paperbacks",
+      "one": "Trade paperback"
+    },
+    {
+      "key": "omnibus",
+      "label": "Omnibus",
+      "one": "Omnibus"
+    },
+    {
+      "key": "manga",
+      "label": "Manga",
+      "one": "Manga"
+    },
+    {
+      "key": "funko",
+      "label": "Funko Pops",
+      "one": "Funko Pop"
+    }
+  ]
+}
