@@ -125,7 +125,7 @@ export function orderEmbed(o, cfg = {}) {
 }
 
 export async function postToDiscord(env, order, cfg) {
-  const url = env.DISCORD_WEBHOOK_URL;
+  const url = String(env.DISCORD_WEBHOOK_URL || "").trim(); // a pasted secret can pick up a stray space or line break
   if (!url) return { ok: false, reason: "not configured" };
   const role = /^\d{5,25}$/.test(String(env.DISCORD_PING_ROLE || "")) ? String(env.DISCORD_PING_ROLE) : null;
   const payload = {
