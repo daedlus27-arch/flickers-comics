@@ -1,7 +1,15 @@
 /* Flickers Comics: shop settings and stock
    ------------------------------------------------------------------
-   Edit this file to change hours, postage, prices and stock.
-   After you commit, GitHub Pages updates the site in a minute or two.
+   The easy way to change stock is on the site itself: click "Staff login" at the
+   bottom of the page. Saving from there rewrites this whole file, so any comments
+   you add below this guide are not kept.
+
+   You can also edit this file on GitHub. After you commit, the site updates in a
+   minute or two.
+
+   FLICKERS_CONFIG: postage (dollars), openHour / closeHour (24-hour clock),
+   timeZone (for the "Open now" badge), collectDaysAhead, testMode, orderEndpoint,
+   and github (the repository the stock manager saves to).
 
    Each item in FLICKERS_PRODUCTS:
      id         unique, no spaces (e.g. "batman-1")
@@ -39,7 +47,8 @@ window.FLICKERS_CONFIG = {
   // Test mode: checkout doesn't take payment or ping Discord. Turn it off once the
   // bank API and the order worker are live, and fill in orderEndpoint.
   testMode: true,
-  orderEndpoint: ""          // e.g. "https://flickers-orders.example.workers.dev/orders"
+  orderEndpoint: "",         // e.g. "https://flickers-orders.example.workers.dev/orders"
+  github: { owner: "daedlus27-arch", repo: "flickers-comics", branch: "main" } // where the stock manager saves
 };
 
 window.FLICKERS_CATEGORIES = [

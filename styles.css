@@ -379,3 +379,87 @@ legend{margin-bottom:12px;padding:0;font-family:var(--font-display);font-size:24
   html{scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+/* ---------- staff stock manager ---------- */
+.admin-btn{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border:2px solid var(--brand-fg);border-radius:999px;background:transparent;color:var(--brand-fg);font-weight:800;font-size:14px;white-space:nowrap}
+.admin-btn:hover{border-color:var(--yellow);color:var(--yellow)}
+.admin-btn svg{width:18px;height:18px;flex:none}
+.admin-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding-inline:5px;border-radius:999px;background:var(--magenta);color:#fff;font-size:12px;font-variant-numeric:tabular-nums}
+@media (max-width:520px){.admin-word{display:none}.admin-btn{padding:8px 10px}}
+.footer-link{margin-left:10px;color:var(--brand-soft);font-size:13px}
+.footer-link:hover{color:var(--yellow)}
+.on-dark-link{color:var(--brand-soft)}
+.on-dark-link:hover{color:var(--yellow)}
+
+.admin{width:min(1120px,calc(100% - 24px));height:calc(100% - 24px);max-height:calc(100% - 24px);margin:auto;overflow:hidden;border:3px solid var(--ink);border-radius:6px;box-shadow:8px 8px 0 rgba(0,0,0,.35)}
+.admin[open]{display:flex;flex-direction:column}
+@media (max-width:640px){.admin{width:100%;height:100%;max-height:100%;border:0;border-radius:0;box-shadow:none}}
+.admin .co-head{position:static}
+.admin-head-text{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;min-width:0}
+.admin-who{font-size:14px;font-weight:600;color:var(--brand-soft)}
+.admin-head-actions{display:flex;align-items:center;gap:16px}
+.admin-head-actions .link-btn{white-space:nowrap}
+.admin-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px clamp(16px,3vw,28px);border-bottom:2px solid var(--ink);background:var(--paper-raised)}
+.admin-bar .search{flex:1 1 200px;max-width:300px}
+.admin-select,.field select{padding:10px 12px;border:2px solid var(--ink);border-radius:4px;background:var(--paper-raised);color:var(--ink);font-size:15px;font-weight:600}
+.field select{width:100%;font-size:16px;font-weight:500}
+.btn-small{padding:8px 14px;font-size:14.5px}
+.admin-publish{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-left:auto}
+.admin-changes{font-size:14px;font-weight:700;color:var(--ink-soft)}
+.admin-changes.has{color:var(--ink)}
+.admin-msg{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:0;padding:11px clamp(16px,3vw,28px);border-bottom:1px solid var(--rule);font-size:14.5px;font-weight:600}
+.admin-msg:empty{display:none}
+.admin-msg.error{color:var(--danger)}
+.admin-msg.ok{color:var(--ok)}
+.admin-msg .btn{color:var(--ink)}
+.admin-list{flex:1;min-height:0;overflow:auto;padding:0 clamp(16px,3vw,28px) 28px}
+.admin-empty{padding:36px 0;color:var(--ink-soft);text-align:center}
+.arow{display:grid;grid-template-columns:46px minmax(0,1fr) 112px 92px auto;grid-template-areas:"thumb info price stock edit";gap:8px 16px;align-items:center;padding-block:12px;border-bottom:1px solid var(--rule)}
+.arow-thumb{grid-area:thumb}
+.arow-thumb .cover{box-shadow:0 3px 8px -3px rgba(0,0,0,.5)}
+.arow-thumb .sold-band{font-size:8px;padding:1px 0}
+.arow-info{grid-area:info;min-width:0}
+.arow-title{margin:0;font-weight:700;line-height:1.3}
+.arow-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:3px 0 0;font-size:12.5px;color:var(--ink-soft)}
+.arow-price{grid-area:price}
+.arow-stock{grid-area:stock}
+.arow-edit{grid-area:edit}
+.arow-field{display:grid;gap:3px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft)}
+.arow-field input{width:100%;padding:7px 8px;border:2px solid var(--ink);border-radius:4px;background:var(--paper-raised);color:var(--ink);font-size:15px;font-weight:700;letter-spacing:0;font-variant-numeric:tabular-nums}
+@media (max-width:720px){
+  .arow{grid-template-columns:46px minmax(0,1fr) minmax(0,1fr) auto;grid-template-areas:"thumb info info edit" "thumb price stock ."}
+}
+.pill{display:inline-block;padding:1px 7px;border:1.5px solid var(--ink);border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.05em;line-height:1.5;text-transform:uppercase;color:var(--ink)}
+.pill-edit{border-color:var(--ink-fixed);background:var(--yellow);color:var(--on-yellow)}
+.pill-added{border-color:var(--cyan);background:var(--cyan);color:#fff}
+.pill-week{border-style:dashed}
+
+.editor,.login{max-height:calc(100% - 24px);margin:auto;overflow:auto;border:3px solid var(--ink);border-radius:6px;box-shadow:8px 8px 0 rgba(0,0,0,.35)}
+.editor{width:min(940px,calc(100% - 24px))}
+.login{width:min(540px,calc(100% - 24px))}
+@media (max-width:640px){.editor,.login{width:100%;height:100%;max-height:100%;border:0;border-radius:0;box-shadow:none}}
+.ed-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;padding:22px clamp(16px,3vw,28px)}
+@media (max-width:720px){.ed-grid{grid-template-columns:minmax(0,1fr)}.ed-cover{max-width:260px}}
+.ed-cover{display:grid;align-content:start;gap:10px}
+.ed-preview{width:100%;max-width:220px}
+.file-btn{position:relative;cursor:pointer;text-align:center}
+.file-btn:focus-within{outline:3px solid var(--focus);outline-offset:2px}
+.ed-cover .field{margin-bottom:4px}
+.ed-fields .two{gap:0 14px}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 14px}
+@media (max-width:560px){.three{grid-template-columns:minmax(0,1fr)}}
+.checks{display:flex;flex-wrap:wrap;gap:10px 20px;margin:2px 0 16px}
+.check{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:15px;cursor:pointer}
+.check input{width:18px;height:18px;margin:0;accent-color:var(--yellow)}
+.group-label{margin:0 0 8px;font-weight:700;font-size:15px}
+.ed-foot{gap:10px 14px}
+.ed-actions{display:flex;flex-wrap:wrap;gap:10px;margin-left:auto}
+.danger-link{color:var(--danger)}
+.danger-link:hover{color:var(--danger)}
+.btn-danger{border-color:var(--danger);background:var(--danger);color:#fff;box-shadow:none}
+.inline-confirm{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-weight:700}
+.login-body{display:grid;gap:14px;padding:20px clamp(16px,3vw,28px) 6px}
+.login-body p{margin:0}
+.login-steps{display:grid;gap:8px;margin:0;padding-left:22px}
+.login-steps a{font-weight:700}
+.login .field{margin:0}

@@ -6,13 +6,15 @@
 const CONFIG = window.FLICKERS_CONFIG;
 const CATEGORIES = window.FLICKERS_CATEGORIES;
 const PRODUCTS = window.FLICKERS_PRODUCTS;
-const HERO_IDS = (window.FLICKERS_NEW_THIS_WEEK || []).filter(id => PRODUCTS.some(p => p.id === id)).slice(0, 3);
-const GRADES = { "NM+": "Near Mint+", "NM": "Near Mint", "NM−": "Near Mint−", "VF": "Very Fine" };
+let HERO_IDS = (window.FLICKERS_NEW_THIS_WEEK || []).filter(id => PRODUCTS.some(p => p.id === id)).slice(0, 3);
+const GRADES = { "NM+": "Near Mint+", "NM": "Near Mint", "NM−": "Near Mint−", "VF": "Very Fine", "FN": "Fine", "VG": "Very Good", "GD": "Good" };
 
 /* ===================== helpers ===================== */
 const $ = id => document.getElementById(id);
-PRODUCTS.forEach(p => { p.stock = Math.max(0, Math.floor(Number(p.stock) || 0)); p.price = Math.max(0, Number(p.price) || 0); });
-const byId = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
+const normalizeProducts = () => PRODUCTS.forEach(p => { p.stock = Math.max(0, Math.floor(Number(p.stock) || 0)); p.price = Math.max(0, Number(p.price) || 0); });
+normalizeProducts();
+let byId = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
+const imageOverride = {}; // freshly uploaded covers, shown until GitHub Pages serves the new files
 const esc = s => String(s ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 const escLines = s => esc(s).replace(/\r?\n/g, "<br>");
 const money = n => "$" + Math.round(n).toLocaleString("en-US");
@@ -392,7 +394,7 @@ function buildCover(p) {
   return `<svg viewBox="0 0 200 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" preserveAspectRatio="xMidYMid slice">${body}</svg>`;
 }
 function coverArt(p) {
-  if (p.image) return `<img src="${esc(p.image)}" alt="" loading="lazy">`;
+  if (p.image) return `<img src="${esc(imageOverride[p.image] || p.image)}" alt="" loading="lazy">`;
   if (!coverCache.has(p.id)) coverCache.set(p.id, buildCover(p));
   const uid = "c" + (++uidCounter);
   return coverCache.get(p.id).split("__U__").join(uid);
@@ -509,8 +511,9 @@ function refreshCards() {
 }
 function renderRack() {
   const rack = $("rack");
+  rack.querySelectorAll(".burst,.fan").forEach(n => n.remove());
   rack.insertAdjacentHTML("afterbegin", `<svg class="burst" viewBox="-100 -100 200 200" aria-hidden="true"><polygon points="${burstPts(0, 0, 66, 100, 22)}" fill="currentColor"/></svg>` +
-    HERO_IDS.map((id, i) => { const p = byId[id]; return `<button type="button" class="fan fan-${i + 1}" data-open="${id}" aria-label="${esc(fullTitle(p))}. View details">${coverHTML(p)}</button>`; }).join(""));
+    HERO_IDS.filter(id => byId[id]).map((id, i) => { const p = byId[id]; return `<button type="button" class="fan fan-${i + 1}" data-open="${id}" aria-label="${esc(fullTitle(p))}. View details">${coverHTML(p)}</button>`; }).join(""));
 }
 
 /* ===================== quick view ===================== */
@@ -874,6 +877,27 @@ $("clearSearch").addEventListener("click", () => {
   renderGrid(); $("q").focus();
 });
 window.addEventListener("storage", ev => { if (ev.key === CART_KEY) { cart = sanitizeCart(store.get(CART_KEY, {})); renderCartUI(); } });
+
+/* ===================== hooks for the staff stock manager (admin.js) ===================== */
+window.FlickersShop = {
+  CONFIG, CATEGORIES, GRADES,
+  MOTIFS: Object.keys(MOTIFS), PALETTES: PAL.length,
+  products: () => PRODUCTS,
+  newThisWeek: () => HERO_IDS.slice(),
+  imageOverride, esc, money, fullTitle, metaLine, toast,
+  coverHTML,
+  coverPreview(p) { coverCache.delete(p.id); const html = coverHTML(p); coverCache.delete(p.id); return html; },
+  apply(list, newIds) {
+    PRODUCTS.splice(0, PRODUCTS.length, ...list);
+    normalizeProducts();
+    byId = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
+    HERO_IDS = (newIds || []).filter(id => byId[id]).slice(0, 3);
+    coverCache.clear();
+    cart = sanitizeCart(cart); saveCart();
+    renderDividers(); renderGrid(); renderRack(); renderCartUI();
+    if (qv.open && !byId[qvState.id]) qv.close(); else if (qv.open) renderQV();
+  }
+};
 
 /* ===================== start ===================== */
 $("footerLogo").src = $("logo").src;
