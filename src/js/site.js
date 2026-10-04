@@ -261,8 +261,8 @@ function renderSummary() {
   $("sumShip").textContent = post ? money(CONFIG.postage) : "Free";
   $("sumTotal").textContent = money(t.total);
   $("footTotal").textContent = money(t.total);
-  $("payBtn").textContent = CONFIG.testMode ? "Place test order" : `Pay ${money(t.total)} with Fleeca`;
-  $("payHint").textContent = CONFIG.testMode ? "Test mode: nothing is charged" : "You'll go to Fleeca to pay from your bank account";
+  $("payBtn").textContent = CONFIG.testMode ? "Place test order" : CONFIG.payOnline ? `Pay ${money(t.total)} with Fleeca` : "Place order";
+  $("payHint").textContent = CONFIG.testMode ? "Test mode: nothing is charged" : CONFIG.payOnline ? "You'll go to Fleeca to pay from your bank account" : "The shop gets your order straight away.";
 }
 function syncMethod() {
   const post = getMethod() === "post";
@@ -342,20 +342,29 @@ async function placeOrder(ev) {
     showDone(order);
     return;
   }
-  // Live mode: the order service re-prices the cart from its own price list, stores the order,
-  // and returns the Fleeca payment link. Discord is pinged by the service once payment clears.
-  const btn = $("payBtn");
-  btn.disabled = true; btn.textContent = "Connecting to Fleeca…";
+  // Live mode: only the comic ids and quantities are sent. The order service looks the prices up itself,
+  // keeps a record, logs the order to the shop's Discord channel, and tells us the real totals.
+  const btn = $("payBtn"), label = btn.textContent;
+  btn.disabled = true; btn.textContent = CONFIG.payOnline ? "Connecting to Fleeca…" : "Sending your order…";
   try {
-    const res = await fetch(CONFIG.orderApi, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(order) });
-    if (!res.ok) throw new Error("bad status");
-    const data = await res.json();
-    if (!data.paymentUrl) throw new Error("no payment link");
-    store.set("flickers-pending-order", { ...order, id: data.orderId || order.id });
-    window.location.href = data.paymentUrl;
+    const res = await fetch(CONFIG.orderApi, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: order.name, phone: order.phone, method: order.method, collectDate: order.collectDate, address: order.address, notes: order.notes, items: order.items.map(i => ({ id: i.id, qty: i.qty })) })
+    });
+    let data = {}; try { data = await res.json(); } catch (e) { /* no body */ }
+    if (!res.ok) { const err = new Error(data.error || "bad status"); err.shown = !!data.error; throw err; }
+    const placed = { ...order, id: data.orderId || order.id, subtotal: data.subtotal ?? order.subtotal, postage: data.postage ?? order.postage, total: data.total ?? order.total, test: false, paid: false };
+    if (data.paymentUrl) {
+      store.set("flickers-pending-order", placed);
+      window.location.href = data.paymentUrl;
+      return;
+    }
+    cart = {}; saveCart(); renderCartUI();
+    btn.disabled = false;
+    showDone(placed);
   } catch (e) {
-    $("formError").textContent = "We couldn't start the payment. Check your connection and try again.";
-    btn.disabled = false; renderSummary();
+    $("formError").textContent = e.shown ? e.message : "We couldn't send your order. Check your connection and try again.";
+    btn.disabled = false; btn.textContent = label; renderSummary();
   }
 }
 function discordPreview(o) {
@@ -363,7 +372,7 @@ function discordPreview(o) {
   const items = o.items.map(i => `${i.qty} × ${esc(i.title)} · ${money(i.price * i.qty)}`).join("<br>");
   return `<section class="dc-wrap" aria-labelledby="dcTitle">
     <h3 id="dcTitle">Staff notification preview</h3>
-    <p class="hint">Shown in test mode only. Once Discord is connected, this posts in your orders channel when a payment clears.</p>
+    <p class="hint">Shown in test mode only. When ordering is switched on, a message like this is posted to the shop's Discord channel for every order.</p>
     <div class="dc">
       <div class="dc-avatar" aria-hidden="true">FC</div>
       <div class="dc-msg">
@@ -380,7 +389,7 @@ function discordPreview(o) {
             <div class="dc-field"><b>${o.method === "post" ? "Postage" : "Collection"}</b>${o.postage ? money(o.postage) : "Free"}</div>
             ${o.notes ? `<div class="dc-field wide"><b>Notes</b>${escLines(o.notes)}</div>` : ""}
           </div>
-          <div class="dc-foot">Paid through Fleeca · ${o.test ? "test order, not charged" : "payment confirmed"}</div>
+          <div class="dc-foot">${o.test ? "Test order, not charged" : o.paid ? "Paid through Fleeca" : "Payment pending"}</div>
         </div>
       </div>
     </div>
@@ -393,10 +402,10 @@ function showDone(o) {
   view.hidden = false;
   view.innerHTML = `<div class="done">
     <div class="done-top">
-      <p class="eyebrow">${o.test ? "Test order" : "Payment received"}</p>
+      <p class="eyebrow">${o.test ? "Test order" : o.paid ? "Payment received" : "Order received"}</p>
       <h2 class="done-title" id="doneTitle" tabindex="-1">Thanks, ${esc(firstName(o.name))}. Order received.</h2>
       <p class="ticket">Order <strong>${esc(o.id)}</strong></p>
-      <p class="done-note">${o.test ? "This was a test, so nothing was charged and the shop wasn't notified." : "Your payment went through and the shop has your order."}</p>
+      <p class="done-note">${o.test ? "This was a test, so nothing was charged and the shop wasn't notified." : o.paid ? "Your payment went through and the shop has your order." : "The shop has your order."}</p>
     </div>
     <div class="done-grid">
       <dl class="done-dl">
@@ -439,7 +448,7 @@ function handlePaymentReturn() {
     cart = {}; saveCart(); renderCartUI();
     store.set("flickers-pending-order", null);
     co.showModal();
-    showDone({ ...pending, test: false });
+    showDone({ ...pending, test: false, paid: true });
   } else if (status !== "paid") {
     toast("Your payment didn't go through, so nothing was charged. Your cart is still here.");
   }

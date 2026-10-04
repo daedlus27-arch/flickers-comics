@@ -17,7 +17,8 @@ const USERS = {
   get: async k => kv.get(k) ?? null, put: async (k, v) => { kv.set(k, String(v)); }, delete: async k => { kv.delete(k); },
   list: async ({ prefix = "" } = {}) => ({ keys: [...kv.keys()].filter(k => k.startsWith(prefix)).map(name => ({ name })), list_complete: true })
 };
-const env = { USERS, SESSION_SECRET: "dev-secret-not-for-production", SETUP_KEY: "dev", GITHUB_TOKEN: "dev", GITHUB_REPO: "dev/dev", GITHUB_BRANCH: "main", ALLOWED_ORIGINS: "http://localhost:8080" };
+const env = { USERS, SESSION_SECRET: "dev-secret-not-for-production", SETUP_KEY: "dev", GITHUB_TOKEN: "dev", GITHUB_REPO: "dev/dev", GITHUB_BRANCH: "main", ALLOWED_ORIGINS: "http://localhost:8080",
+  SITE_URL: "http://localhost:8080", ORDERS_ENABLED: "true", DISCORD_WEBHOOK_URL: "http://discord.local/api/webhooks/dev/dev" };
 kv.set("user:owner", JSON.stringify({ username: "owner", role: "owner", ...(await hashPassword("owner-password-1")), pv: 1, created: new Date().toISOString() }));
 
 /* pretend GitHub */
@@ -28,6 +29,12 @@ const blobs = {};
 globalThis.fetch = async (url, opts = {}) => {
   const p = new URL(url).pathname.replace("/repos/dev/dev", ""), method = opts.method || "GET";
   const ok = d => new Response(JSON.stringify(d), { status: 200 });
+  if (String(url).startsWith("http://localhost:8080/data/shop.json")) return new Response(fs.readFileSync(path.join(root, "dist/data/shop.json")), { status: 200 });
+  if (String(url).startsWith("http://discord.local/")) {
+    const m = JSON.parse(opts.body), e = m.embeds[0];
+    console.log("\n--- Discord message ---\n" + e.title + "\n" + e.description + "\n" + e.fields.map(f => "  " + f.name + ": " + f.value.replace(/\n/g, " | ")).join("\n") + "\n  [" + e.footer.text + "]\n-----------------------");
+    return ok({});
+  }
   if (p.startsWith("/git/ref/heads/")) return ok({ object: { sha: "head" + n } });
   if (p === "/contents/data/products.json") return ok({ sha: "p" + n, content: Buffer.from(products).toString("base64") });
   if (p === "/contents/data/featured.json") return ok({ sha: "f" + n, content: Buffer.from(featured).toString("base64") });

@@ -19,6 +19,8 @@ const cp = (from, to) => { const f = path.join(DIST, to); fs.mkdirSync(path.dirn
 const cfg = JSON.parse(rd("data/config.json"));
 const products = JSON.parse(rd("data/products.json"));
 const featuredRaw = JSON.parse(rd("data/featured.json"));
+if (process.env.ORDERS_LIVE) cfg.testMode = false; // local testing of the live order path
+if (process.env.ORDER_API) cfg.orderApi = process.env.ORDER_API;
 if (process.env.ADMIN_API) cfg.adminApi = process.env.ADMIN_API; // lets you point a local build at a local or test staff API
 const cats = cfg.categories;
 
@@ -161,7 +163,7 @@ wr("admin/index.html", adminPage({ cfg }));
 
 /* ---------- data for the browser, sitemap, robots ---------- */
 wr("data/shop.json", JSON.stringify({
-  config: { postage: cfg.postage, openHour: cfg.openHour, closeHour: cfg.closeHour, timeZone: cfg.timeZone, collectDaysAhead: cfg.collectDaysAhead, testMode: cfg.testMode, orderApi: cfg.orderApi || "" },
+  config: { postage: cfg.postage, openHour: cfg.openHour, closeHour: cfg.closeHour, timeZone: cfg.timeZone, collectDaysAhead: cfg.collectDaysAhead, testMode: cfg.testMode, orderApi: cfg.orderApi || "", payOnline: !!cfg.payOnline },
   categories: cats, featured: featuredRaw, groupBy, products
 }));
 const today = new Date().toISOString().slice(0, 10);

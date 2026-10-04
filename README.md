@@ -10,7 +10,7 @@ It's a static site hosted free on GitHub Pages. Every comic has its own page, an
 | `data/` | The shop's content: `products.json` (stock), `featured.json` ("new this week"), `config.json` (postage, hours, categories, addresses). |
 | `build/` | A small script that turns `data/` and `assets/` into the finished site in `dist/`: one page per comic, resized covers, sitemap, fonts. |
 | `src/` | The site's CSS and JavaScript (`js/site.js` is the storefront, `admin/admin.js` the staff area, `shared.mjs` is used by both and by the build). |
-| `worker/` | The staff service (Cloudflare Worker): logins and publishing. See `docs/SETUP.md`. |
+| `worker/` | The staff service (Cloudflare Worker): logins, publishing, and the order log with Discord. See `docs/SETUP.md` and `docs/DISCORD.md`. |
 | `.github/workflows/deploy.yml` | Tests, builds and publishes the site on every push to `main`. |
 | `assets/` | Logo, icons and the original cover photos (`assets/covers/`). |
 
@@ -41,9 +41,10 @@ Opening hours, postage and the time zone used for the "Open now" badge are in `d
 
 ## Test mode
 
-Checkout runs in test mode (`testMode: true` in `data/config.json`). Test orders aren't charged and nobody
-is notified. Once the business is approved for the GTA World banking API, an order service takes Fleeca
-payments and posts each order to Discord (set `orderApi` in `data/config.json`), and test mode is switched off.
+Checkout runs in test mode (`testMode: true` in `data/config.json`): test orders aren't charged and nobody
+is notified. The order pipeline is already built and switched off. When it's on, every order is re-priced
+from the real catalog, saved for 90 days (staff area → **Orders**), and logged to a Discord channel. See
+`docs/DISCORD.md` to connect Discord, test it and switch it on. Fleeca payment is a later step (`payOnline`).
 
 ## Working on the site
 

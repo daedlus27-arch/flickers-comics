@@ -99,3 +99,14 @@
 .bulk-bar .link-btn{margin-left:auto;color:var(--on-yellow)}
 .bulk-names{margin:0;padding-left:20px;font-size:15px}
 .prompt .two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}
+
+.orders-top{padding:14px 0 6px}
+.orders-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:6px}
+.orders-top .hint{margin:6px 0 0}
+.order{border-bottom:1px solid var(--rule)}
+.order summary{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;padding:14px 0;cursor:pointer;list-style:none}
+.order summary::-webkit-details-marker{display:none}
+.order summary::before{content:"▸";color:var(--ink-soft)}
+.order[open] summary::before{content:"▾"}
+.order-total{margin-left:auto;font-variant-numeric:tabular-nums}
+.order .done-dl{margin:0 0 16px}

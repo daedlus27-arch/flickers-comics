@@ -13,7 +13,11 @@
      GITHUB_TOKEN    secret, fine-grained token with Contents: read and write on the shop repo only
      GITHUB_REPO     "owner/repo"
      GITHUB_BRANCH   branch the site is built from, e.g. "main"
-     ALLOWED_ORIGINS comma-separated origins allowed to call this API (the site, plus localhost if wanted) */
+     ALLOWED_ORIGINS comma-separated origins allowed to call this API (the site, plus localhost if wanted)
+   Orders and Discord (src/orders.js, docs/DISCORD.md): SITE_URL, ORDERS_ENABLED, DISCORD_WEBHOOK_URL, DISCORD_PING_ROLE */
+
+import { HttpError, bad } from "./http.js";
+import { placeOrder, listOrders, sendTestMessage } from "./orders.js";
 
 const PBKDF2_ITERATIONS = 100000; // Cloudflare Workers allows at most 100,000
 const SESSION_HOURS = 12;
@@ -35,10 +39,6 @@ const unb64url = str => unb64(str.replace(/-/g, "+").replace(/_/g, "/") + "=".re
 const textToB64 = text => b64(enc.encode(text));
 const b64ToText = str => new TextDecoder().decode(unb64(str.replace(/\s/g, "")));
 
-class HttpError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
-const bad = (status, message) => new HttpError(status, message);
 
 function equalBytes(a, b) {
   if (a.length !== b.length) return false;
@@ -296,6 +296,8 @@ async function route(request, env) {
     return { token: await signToken(env.SESSION_SECRET, { u: user.username, pv: user.pv, exp }), exp, user: publicUser(user) };
   }
 
+  if (method === "POST" && path === "/orders") return placeOrder(env, await readJson(request), ip);
+
   const user = await authenticate(request, env);
 
   if (method === "GET" && path === "/me") return { user: publicUser(user) };
@@ -314,6 +316,9 @@ async function route(request, env) {
     return { version: s.version, products: s.products, featured: s.featured };
   }
   if (method === "POST" && path === "/publish") return publish(env, user, await readJson(request));
+
+  if (method === "GET" && path === "/orders") return { orders: await listOrders(env), ordersOpen: String(env.ORDERS_ENABLED) === "true", discord: !!env.DISCORD_WEBHOOK_URL };
+  if (method === "POST" && path === "/orders/test") return sendTestMessage(env, user);
 
   if (path === "/users" && method === "GET") { needOwner(user); return { users: (await listUsers(env)).map(publicUser) }; }
   if (path === "/users" && method === "POST") {

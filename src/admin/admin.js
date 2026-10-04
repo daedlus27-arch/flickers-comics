@@ -1,7 +1,7 @@
 /* Flickers Comics staff area.
    Staff sign in with a username and password. Stock is loaded from and published to the staff API
    (the Cloudflare Worker in worker/), which does the GitHub commit. No GitHub token is ever in the browser. */
-import { esc, money, fullTitle, metaLine, slug, coverHTML } from "../js/shared.js";
+import { esc, escLines, money, fullTitle, metaLine, slug, coverHTML } from "../js/shared.js";
 
 const app = document.getElementById("app");
 const API = (app.dataset.api || "").replace(/\/+$/, "");
@@ -196,6 +196,7 @@ function renderShell() {
     </div>
     <div class="adm-tabs" role="tablist" aria-label="Staff area">
       <button type="button" class="adm-tab" role="tab" data-tab="stock" aria-selected="${S.tab === "stock"}">Stock</button>
+      <button type="button" class="adm-tab" role="tab" data-tab="orders" aria-selected="${S.tab === "orders"}">Orders</button>
       ${owner ? `<button type="button" class="adm-tab" role="tab" data-tab="staff" aria-selected="${S.tab === "staff"}">Staff</button>` : ""}
       <button type="button" class="adm-tab" role="tab" data-tab="account" aria-selected="${S.tab === "account"}">My password</button>
     </div>
@@ -207,6 +208,7 @@ function renderShell() {
   app.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { S.tab = b.dataset.tab; renderShell(); }));
   $("editDlg").addEventListener("click", ev => { if (ev.target === $("editDlg")) $("editDlg").close(); });
   if (S.tab === "stock") renderStock();
+  else if (S.tab === "orders") renderOrders();
   else if (S.tab === "staff" && owner) renderStaff();
   else { S.tab = "account"; renderAccount(); }
 }
@@ -637,6 +639,39 @@ async function publish() {
     say(e.message, "error", actions);
   }
   if ($("aPublish")) $("aPublish").textContent = "Publish changes";
+}
+
+/* ---------- orders tab ---------- */
+async function renderOrders() {
+  $("panel").innerHTML = `<div class="admin-msg" id="aMsg" role="status"></div>
+    <div class="orders-top" id="ordersTop"><p class="hint">Loading…</p></div>
+    <div id="ordersList"></div>`;
+  let data;
+  try { data = await api("/orders"); } catch (e) { say(e.message, "error"); return; }
+  const when = iso => new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  $("ordersTop").innerHTML = `<div class="orders-status">
+      <span class="pill ${data.ordersOpen ? "pill-added" : ""}">Online ordering: ${data.ordersOpen ? "ON" : "OFF"}</span>
+      <span class="pill ${data.discord ? "pill-added" : ""}">Discord: ${data.discord ? "connected" : "not connected"}</span>
+      <button type="button" class="btn btn-small" id="dcTest"${data.discord ? "" : " disabled"}>Send a test message to Discord</button>
+    </div>
+    <p class="hint">Every order is saved here for 90 days and posted to the Discord channel. ${data.ordersOpen ? "" : "Customers can't order online yet, so this list stays empty until ordering is switched on."}</p>`;
+  $("dcTest").addEventListener("click", async () => {
+    $("dcTest").disabled = true;
+    try { await api("/orders/test", { method: "POST" }); say("Sent. Check the Discord channel for a message marked TEST.", "ok"); }
+    catch (e) { say(e.message, "error"); }
+    $("dcTest").disabled = false;
+  });
+  $("ordersList").innerHTML = data.orders.length ? data.orders.map(o => `<details class="order">
+      <summary><b>${esc(o.id)}</b> <span>${esc(when(o.placedAt))}</span> <span>${esc(o.name)}</span> <span class="pill">${o.method === "post" ? "Post" : "Collect"}</span> <b class="order-total">${money(o.total)}</b>${/^failed/.test(o.discord || "") ? ' <span class="pill pill-edit">Not posted to Discord</span>' : ""}</summary>
+      <dl class="done-dl">
+        <dt>Phone</dt><dd>${esc(o.phone)}</dd>
+        ${o.method === "collect" ? `<dt>Collect on</dt><dd>${esc(o.collectDate)}</dd>` : `<dt>Post to</dt><dd>${escLines(o.address)}</dd>`}
+        <dt>Items</dt><dd>${o.items.map(i => `${i.qty} × ${esc(i.title)} · ${money(i.price * i.qty)}`).join("<br>")}</dd>
+        <dt>Total</dt><dd>${money(o.total)}${o.postage ? ` (incl. ${money(o.postage)} postage)` : ""}</dd>
+        <dt>Payment</dt><dd>${o.paid ? "Paid" : "Pending"}</dd>
+        ${o.notes ? `<dt>Notes</dt><dd>${escLines(o.notes)}</dd>` : ""}
+        <dt>Discord</dt><dd>${esc(o.discord || "")}</dd>
+      </dl></details>`).join("") : `<p class="admin-empty">No orders yet.</p>`;
 }
 
 /* ---------- staff tab (owner) ---------- */
