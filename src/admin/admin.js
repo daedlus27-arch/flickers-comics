@@ -24,7 +24,7 @@ const canon = v => Array.isArray(v) ? `[${v.map(canon).join(",")}]`
   : JSON.stringify(v);
 const X = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
 
-const S = { token: "", exp: 0, user: null, tab: "stock", version: "", orig: [], draft: [], origFeat: [], draftFeat: [], uploads: {}, previews: {}, busy: false, users: [] };
+const S = { token: "", exp: 0, user: null, tab: "stock", version: "", orig: [], draft: [], origFeat: [], draftFeat: [], uploads: {}, previews: {}, busy: false, users: [], selected: new Set() };
 
 /* ---------- session ---------- */
 const sessionStore = {
@@ -148,6 +148,7 @@ async function loadStock() {
   S.version = s.version;
   S.orig = clone(s.products); S.draft = clone(s.products);
   S.origFeat = s.featured.slice(); S.draftFeat = s.featured.slice();
+  S.selected = new Set();
 }
 
 function renderShell() {
@@ -164,7 +165,8 @@ function renderShell() {
     </div>
     <div class="adm-panel" id="panel" role="tabpanel"></div>
   </div>
-  <dialog class="editor" id="editDlg" aria-labelledby="edTitle"></dialog>`;
+  <dialog class="editor" id="editDlg" aria-labelledby="edTitle"></dialog>
+  <dialog class="prompt" id="bulkDlg" aria-labelledby="bulkTitle"></dialog>`;
   $("signOut").addEventListener("click", askSignOut);
   app.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { S.tab = b.dataset.tab; renderShell(); }));
   $("editDlg").addEventListener("click", ev => { if (ev.target === $("editDlg")) $("editDlg").close(); });
@@ -191,8 +193,26 @@ function renderStock() {
       </div>
     </div>
     <div class="admin-msg" id="aMsg" role="status"></div>
+    <div class="bulk-bar" id="bulkBar" role="region" aria-label="Edit the selected comics" hidden>
+      <b id="bulkCount">0 selected</b>
+      <button type="button" class="btn btn-small" data-bulk="price">Set price</button>
+      <button type="button" class="btn btn-small" data-bulk="adjust">Raise or lower price</button>
+      <button type="button" class="btn btn-small" data-bulk="stock">Set stock</button>
+      <button type="button" class="btn btn-small btn-danger" data-bulk="delete">Delete</button>
+      <button type="button" class="link-btn" data-bulk="clear">Clear selection</button>
+    </div>
+    <div class="list-head">
+      <label class="check"><input type="checkbox" id="selAll"><span id="selAllLabel">Select all</span></label>
+      <span class="hint">Tip: tick one comic, then hold Shift and tick another to select everything between.</span>
+    </div>
     <div id="aList"></div>`;
   $("aQ").addEventListener("input", renderList);
+  $("selAll").addEventListener("change", () => {
+    const vis = visibleList();
+    if ($("selAll").checked) vis.forEach(p => S.selected.add(p.id)); else vis.forEach(p => S.selected.delete(p.id));
+    updateSelection();
+  });
+  $("bulkBar").addEventListener("click", ev => { const b = ev.target.closest("[data-bulk]"); if (b) openBulk(b.dataset.bulk); });
   $("aList").addEventListener("change", ev => {
     const t = ev.target, id = t.dataset.price || t.dataset.stock;
     if (!id) return;
@@ -206,10 +226,24 @@ function renderStock() {
     if (t.dataset.price) p.price = n; else p.stock = n;
     say(""); updateCounts(); refreshRow(id);
   });
-  $("aList").addEventListener("click", ev => { const b = ev.target.closest("[data-edit]"); if (b) openEditor(b.dataset.edit); });
+  let anchorId = null; // last ticked comic, for Shift-click ranges
+  $("aList").addEventListener("click", ev => {
+    const cb = ev.target.closest("[data-sel]");
+    if (cb) {
+      const id = cb.dataset.sel, on = cb.checked;
+      if (ev.shiftKey && anchorId && anchorId !== id) {
+        const ids = visibleList().map(p => p.id), a = ids.indexOf(anchorId), z = ids.indexOf(id);
+        if (a >= 0 && z >= 0) ids.slice(Math.min(a, z), Math.max(a, z) + 1).forEach(i => (on ? S.selected.add(i) : S.selected.delete(i)));
+      } else if (on) S.selected.add(id); else S.selected.delete(id);
+      anchorId = id;
+      updateSelection();
+      return;
+    }
+    const b = ev.target.closest("[data-edit]"); if (b) openEditor(b.dataset.edit);
+  });
   $("aAdd").addEventListener("click", () => openEditor(null));
   $("aDiscard").addEventListener("click", () => say("Throw away all unpublished changes?", "error", [
-    { label: "Discard changes", danger: true, fn: () => { S.draft = clone(S.orig); S.draftFeat = S.origFeat.slice(); renderList(); say("Changes discarded.", "ok"); } },
+    { label: "Discard changes", danger: true, fn: () => { S.draft = clone(S.orig); S.draftFeat = S.origFeat.slice(); S.selected.clear(); renderList(); say("Changes discarded.", "ok"); } },
     { label: "Keep them", fn: () => say("") }
   ]));
   $("aPublish").addEventListener("click", publish);
@@ -232,13 +266,17 @@ function rowPills(p, c) {
   if (p.stock <= 0) pills.push(`<span class="pill">Sold out</span>`);
   return pills.join("");
 }
+function visibleList() {
+  const q = ($("aQ").value || "").trim().toLowerCase();
+  return S.draft.filter(p => !q || [label(p), p.publisher].join(" ").toLowerCase().includes(q));
+}
 function renderList() {
   const c = updateCounts();
-  const q = ($("aQ").value || "").trim().toLowerCase();
-  const list = S.draft.filter(p => !q || [label(p), p.publisher].join(" ").toLowerCase().includes(q));
+  const list = visibleList();
   $("aList").innerHTML = list.length ? list.map(p => {
     const t = label(p);
-    return `<div class="arow" data-row="${esc(p.id)}">
+    return `<div class="arow${S.selected.has(p.id) ? " is-selected" : ""}" data-row="${esc(p.id)}">
+      <input type="checkbox" class="arow-sel" data-sel="${esc(p.id)}" aria-label="Select ${esc(t)}"${S.selected.has(p.id) ? " checked" : ""}>
       <div class="arow-thumb">${thumb(p)}</div>
       <div class="arow-info"><p class="arow-title">${esc(t)}</p><p class="arow-meta"><span>${esc(metaLine(p, CATEGORIES))}</span><span class="arow-pills">${rowPills(p, c)}</span></p></div>
       <label class="arow-field arow-price">Price ($)<input type="number" min="0" step="1" inputmode="numeric" data-price="${esc(p.id)}" value="${esc(p.price)}" aria-label="Price of ${esc(t)}"></label>
@@ -246,6 +284,109 @@ function renderList() {
       <button type="button" class="btn btn-small arow-edit" data-edit="${esc(p.id)}" aria-label="Edit ${esc(t)}">Edit</button>
     </div>`;
   }).join("") : `<p class="admin-empty">${S.draft.length ? "Nothing matches that search." : "No stock yet. Click “+ Add item” to add the first one."}</p>`;
+  updateSelection();
+}
+
+/* ---------- selecting several comics, and editing them together ---------- */
+function updateSelection() {
+  const have = new Set(S.draft.map(p => p.id));
+  S.selected.forEach(id => { if (!have.has(id)) S.selected.delete(id); });
+  const vis = visibleList(), ticked = vis.filter(p => S.selected.has(p.id)).length;
+  const all = $("selAll");
+  all.checked = vis.length > 0 && ticked === vis.length;
+  all.indeterminate = ticked > 0 && ticked < vis.length;
+  all.disabled = vis.length === 0;
+  const searching = ($("aQ").value || "").trim() !== "";
+  $("selAllLabel").textContent = searching ? `Select all ${vis.length} matching` : `Select all ${vis.length}`;
+  const n = S.selected.size;
+  $("bulkBar").hidden = n === 0;
+  $("bulkCount").textContent = `${n} selected`;
+  $("aList").querySelectorAll(".arow").forEach(row => {
+    const on = S.selected.has(row.dataset.row);
+    row.classList.toggle("is-selected", on);
+    row.querySelector("[data-sel]").checked = on;
+  });
+}
+const selectedItems = () => S.draft.filter(p => S.selected.has(p.id));
+const plural = n => `${n} comic${n === 1 ? "" : "s"}`;
+const roundPrice = n => Math.max(0, Math.round(n));
+
+function openBulk(mode) {
+  if (mode === "clear") { S.selected.clear(); updateSelection(); return; }
+  const items = selectedItems(), n = items.length;
+  if (!n) return;
+  const dlg = $("bulkDlg");
+  const head = title => `<div class="co-head"><h2 class="dialog-title" id="bulkTitle">${title}</h2><button type="button" class="icon-btn on-dark" data-close aria-label="Close">${X}</button></div>`;
+  const foot = (label, danger) => `<p class="form-error" id="bulkError" role="alert"></p><button type="submit" class="btn ${danger ? "btn-danger" : "btn-yellow"} btn-small">${label}</button>`;
+  let html, apply;
+
+  if (mode === "price") {
+    html = `${head("Set price")}<div class="adm-card-body"><p>Give all <b>${plural(n)}</b> the same price.</p>
+      <div class="field"><label for="b-price">New price ($)</label><input id="b-price" type="number" min="0" step="1" inputmode="numeric"></div>${foot("Set price")}</div>`;
+    apply = () => {
+      const v = Number($("b-price").value);
+      if ($("b-price").value === "" || !Number.isFinite(v) || v < 0 || v > 10000000) return { error: "Enter a price of 0 or more." };
+      items.forEach(p => { p.price = roundPrice(v); });
+      return { done: `Set the price of ${plural(n)} to ${money(roundPrice(v))}.` };
+    };
+  } else if (mode === "adjust") {
+    html = `${head("Raise or lower price")}<div class="adm-card-body"><p>Change the price of <b>${plural(n)}</b>. Results are rounded to whole dollars.</p>
+      <div class="two"><div class="field"><label for="b-dir">Change</label><select id="b-dir"><option value="up">Raise by</option><option value="down">Lower by</option></select></div>
+      <div class="field"><label for="b-amt">Amount</label><input id="b-amt" type="number" min="0" step="any" inputmode="decimal"></div></div>
+      <div class="field"><label for="b-unit">In</label><select id="b-unit"><option value="pct">Percent (%)</option><option value="usd">Dollars ($)</option></select></div>
+      <p class="hint" id="b-preview" aria-live="polite"></p>${foot("Change prices")}</div>`;
+    const next = p => {
+      const a = Number($("b-amt").value) || 0, sign = $("b-dir").value === "up" ? 1 : -1;
+      return roundPrice($("b-unit").value === "pct" ? p.price * (1 + sign * a / 100) : p.price + sign * a);
+    };
+    const preview = () => {
+      const p = items[0], a = $("b-amt").value;
+      $("b-preview").textContent = a === "" ? "" : `For example, ${label(p)}: ${money(p.price)} → ${money(next(p))}`;
+    };
+    apply = () => {
+      const a = Number($("b-amt").value);
+      if ($("b-amt").value === "" || !Number.isFinite(a) || a < 0) return { error: "Enter an amount of 0 or more." };
+      if ($("b-unit").value === "pct" && $("b-dir").value === "down" && a > 100) return { error: "You can't lower prices by more than 100%." };
+      items.forEach(p => { p.price = next(p); });
+      return { done: `${$("b-dir").value === "up" ? "Raised" : "Lowered"} the price of ${plural(n)} by ${$("b-unit").value === "pct" ? a + "%" : money(a)}.` };
+    };
+    dlg.oninput = preview;
+  } else if (mode === "stock") {
+    html = `${head("Set stock")}<div class="adm-card-body"><p>Set the copies in stock for all <b>${plural(n)}</b>. Use 0 to mark them sold out.</p>
+      <div class="field"><label for="b-stock">Copies in stock</label><input id="b-stock" type="number" min="0" step="1" inputmode="numeric"></div>${foot("Set stock")}</div>`;
+    apply = () => {
+      const v = Number($("b-stock").value);
+      if ($("b-stock").value === "" || !Number.isInteger(v) || v < 0 || v > 100000) return { error: "Enter a whole number of copies, 0 or more." };
+      items.forEach(p => { p.stock = v; });
+      return { done: `Set stock to ${v} for ${plural(n)}.` };
+    };
+  } else if (mode === "delete") {
+    const names = items.slice(0, 5).map(p => `<li>${esc(label(p))}</li>`).join("");
+    html = `${head(`Delete ${plural(n)}?`)}<div class="adm-card-body"><p>These will leave the shop when you publish. You can still discard the change before then.</p>
+      <ul class="bulk-names">${names}${n > 5 ? `<li>…and ${n - 5} more</li>` : ""}</ul>${foot(`Delete ${plural(n)}`, true)}</div>`;
+    apply = () => {
+      const gone = new Set(S.selected);
+      S.draft = S.draft.filter(p => !gone.has(p.id));
+      S.draftFeat = S.draftFeat.filter(id => !gone.has(id));
+      S.selected.clear();
+      return { done: `Deleted ${plural(n)}. They leave the shop when you publish.` };
+    };
+  } else return;
+
+  dlg.innerHTML = `<form id="bulkForm" novalidate>${html}</form>`;
+  if (mode !== "adjust") dlg.oninput = null;
+  dlg.onclick = ev => { if (ev.target === dlg || ev.target.closest("[data-close]")) dlg.close(); };
+  $("bulkForm").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const result = apply();
+    if (result.error) { $("bulkError").textContent = result.error; return; }
+    dlg.close();
+    renderList();
+    say(`${result.done} Click “Publish changes” when you're ready for customers to see it.`, "ok");
+  });
+  dlg.showModal();
+  const first = dlg.querySelector("input, select");
+  if (first) first.focus(); else dlg.querySelector('button[type="submit"]').focus();
 }
 function refreshRow(id) {
   const row = $("aList").querySelector(`[data-row="${CSS.escape(id)}"]`);
