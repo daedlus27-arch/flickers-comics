@@ -13,7 +13,7 @@ ALLOWED_ORIGINS = "https://daedlus27-arch.github.io"
 # then paste the id it prints below.
 [[kv_namespaces]]
 binding = "USERS"
-id = "PASTE_KV_NAMESPACE_ID_HERE"
+id = "e2534491249a49fe83ca2dd0db40ed25"
 
 # Secrets are not stored in this file. Set them with `npx wrangler secret put NAME`:
 #   SESSION_SECRET   a long random string

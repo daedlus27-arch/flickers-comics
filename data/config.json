@@ -6,7 +6,7 @@
   "collectDaysAhead": 14,
   "testMode": true,
   "siteUrl": "https://daedlus27-arch.github.io/flickers-comics",
-  "adminApi": "",
+  "adminApi": "https://flickers-staff-api.flickers-comics.workers.dev",
   "categories": [
     {
       "key": "all",
