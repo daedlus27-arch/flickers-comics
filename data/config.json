@@ -4,7 +4,7 @@
   "closeHour": 22,
   "timeZone": "Europe/London",
   "collectDaysAhead": 14,
-  "testMode": true,
+  "testMode": false,
   "siteUrl": "https://flickerscomics.github.io",
   "adminApi": "https://flickers-staff-api.flickers-comics.workers.dev",
   "orderApi": "https://flickers-staff-api.flickers-comics.workers.dev/orders",

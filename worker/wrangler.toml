@@ -11,7 +11,7 @@ ALLOWED_ORIGINS = "https://flickerscomics.github.io"
 # The shop customers see. The Worker reads prices and stock from here when an order comes in.
 SITE_URL = "https://flickerscomics.github.io"
 # Public order endpoint. Keep "false" until the shop is ready to take real orders (docs/DISCORD.md).
-ORDERS_ENABLED = "false"
+ORDERS_ENABLED = "true"
 # Optional: the id of a Discord role to ping on every new order.
 # DISCORD_PING_ROLE = "123456789012345678"
 
