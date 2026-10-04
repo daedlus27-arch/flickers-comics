@@ -15,7 +15,7 @@ const comicUrl = id => `${root}comic/${id}/`;
 
 let CONFIG, CATEGORIES, PRODUCTS = [], byId = {};
 const cover = (p, opts) => coverHTML(p, { imgBase: root, ...opts });
-const statusReady = fetch(`${root}data/shop.json`).then(r => { if (!r.ok) throw new Error("shop.json " + r.status); return r.json(); });
+const statusReady = fetch(`${root}data/shop.json?v=${document.body.dataset.build || ""}`).then(r => { if (!r.ok) throw new Error("shop.json " + r.status); return r.json(); });
 
 /* ===================== hours ===================== */
 function shopNow() {
@@ -182,7 +182,7 @@ function renderQV() {
       <p class="eyebrow">${esc(catOf(CATEGORIES, p.cat).one)}</p>
       <h2 class="qv-title" id="qvTitle">${esc(fullTitle(p))}</h2>
       <p class="qv-price">${money(p.price)}</p>
-      <p class="qv-blurb">${esc(p.blurb)}</p>
+      ${p.blurb ? `<p class="qv-blurb">${esc(p.blurb)}</p>` : ""}
       ${p.staff ? `<p class="qv-talker">“${esc(p.staff)}”<small>Staff pick</small></p>` : ""}
       <dl class="specs">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
       <div class="qv-buy">${buyHTML(p, qvState)}</div>
@@ -481,7 +481,7 @@ function buyAction(action, st, rerender, inDialog) {
 }
 
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-open],[data-add],[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close]");
+  const t = ev.target.closest("[data-open],[data-add],.divider[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close]");
   if (!t) return;
   const d = t.dataset;
   if (d.open) {

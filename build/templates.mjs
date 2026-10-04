@@ -3,6 +3,7 @@ import { esc, money, fullTitle, metaLine, catOf, coverHTML, hoursText, DAYS, hou
 
 const X = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
 export const SITE_NAME = "Flickers Comics";
+export const BUILD_ID = Date.now().toString(36);
 export const DEFAULT_DESC = "Independent comic shop. Order online, then collect at the counter or have it posted to you.";
 
 /* ---------- page shell ---------- */
@@ -32,7 +33,7 @@ ${css.map(c => `<link rel="stylesheet" href="${root}${c}">`).join("\n")}
 ${extraHead}
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, "\\u003c")}</script>` : ""}
 </head>
-<body data-root="${root}">
+<body data-root="${root}" data-build="${BUILD_ID}">
 ${body}
 ${script ? `<script type="module" src="${root}${script}"></script>` : ""}
 </body>
@@ -72,9 +73,9 @@ export function footer(root, cfg) {
   <div class="wrap footer-in">
     <img class="footer-logo" src="${root}assets/flickers-logo.png" alt="Flickers Comics" width="640" height="104" loading="lazy">
     <div class="footer-cols">
-      <div><h3>Hours</h3><p>Every day, ${hoursText(cfg)}</p></div>
-      <div><h3>Orders</h3><p>Collect in store: free<br>Postage: ${money(cfg.postage)}</p></div>
-      <div><h3>Payment</h3><p>Pay from your bank account<br>through Fleeca</p></div>
+      <div><h2>Hours</h2><p>Every day, ${hoursText(cfg)}</p></div>
+      <div><h2>Orders</h2><p>Collect in store: free<br>Postage: ${money(cfg.postage)}</p></div>
+      <div><h2>Payment</h2><p>Pay from your bank account<br>through Fleeca</p></div>
     </div>
     <p class="fine">© Flickers Comics. All prices in dollars. <a class="footer-link" href="${root}admin/">Staff login</a></p>
   </div>
@@ -231,7 +232,7 @@ export function detailHTML(p, cats, root) {
       <p class="eyebrow">${esc(catOf(cats, p.cat).one)}</p>
       <h1 class="qv-title">${esc(t)}</h1>
       <p class="qv-price">${money(p.price)}</p>
-      <p class="qv-blurb">${esc(p.blurb)}</p>
+      ${p.blurb ? `<p class="qv-blurb">${esc(p.blurb)}</p>` : ""}
       ${p.staff ? `<p class="qv-talker">“${esc(p.staff)}”<small>Staff pick</small></p>` : ""}
       <dl class="specs">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
       <div class="qv-buy" data-buy="${esc(p.id)}">${p.stock <= 0 ? `<p class="qv-limit">This one is sold out.</p>` : ""}</div>

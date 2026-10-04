@@ -117,7 +117,7 @@ async function createUser(env, username, password, role) {
 }
 
 /* ---------- login throttling (best effort: KV is eventually consistent) ---------- */
-async function throttle(env, key, limit, ttl = 900) {
+async function throttle(env, key, limit) {
   const n = Number(await env.USERS.get(key)) || 0;
   if (n >= limit) throw bad(429, "Too many failed sign-ins. Wait 15 minutes and try again.");
   return n;
@@ -290,6 +290,7 @@ async function route(request, env) {
       await Promise.all([noteFailure(env, ipKey, ipFails), noteFailure(env, userKeyRl, userFails)]);
       throw bad(401, "That username and password don't match.");
     }
+    await env.USERS.delete(userKeyRl);
     const ttl = (body.remember ? REMEMBER_DAYS * 24 : SESSION_HOURS) * 3600;
     const exp = Math.floor(Date.now() / 1000) + ttl;
     return { token: await signToken(env.SESSION_SECRET, { u: user.username, pv: user.pv, exp }), exp, user: publicUser(user) };

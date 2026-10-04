@@ -139,7 +139,7 @@ for (const p of products) {
     ogImage: img,
     ogType: "product",
     jsonld: {
-      "@context": "https://schema.org", "@type": "Product", name: t, description: p.blurb, image: img, sku: p.id,
+      "@context": "https://schema.org", "@type": "Product", name: t, description: p.blurb || undefined, image: img, sku: p.id,
       brand: p.publisher ? { "@type": "Brand", name: p.publisher } : undefined,
       offers: { "@type": "Offer", url: `${siteUrl}/comic/${p.id}/`, price: p.price, availability: p.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock" }
     },

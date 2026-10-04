@@ -89,6 +89,13 @@ test("login is throttled after repeated failures", async () => {
   for (let i = 0; i < 11; i++) last = await j(await call(env, "POST", "/login", { username: "owner", password: "bad bad bad bad" }, null, { "CF-Connecting-IP": "9.9.9.9" }));
   assert.equal(last.status, 429);
 });
+test("a correct sign-in clears earlier failed attempts for that user", async () => {
+  const env = baseEnv(); await setup(env);
+  for (let i = 0; i < 4; i++) await call(env, "POST", "/login", { username: "owner", password: "wrong wrong wrong" });
+  assert.ok(env.USERS.m.has("rl:u:owner"));
+  assert.equal((await j(await call(env, "POST", "/login", { username: "owner", password: "correct horse battery" }))).status, 200);
+  assert.ok(!env.USERS.m.has("rl:u:owner"));
+});
 test("protected routes need a valid token; staff can't manage users", async () => {
   const env = baseEnv(); const owner = await setup(env);
   assert.equal((await j(await call(env, "GET", "/me"))).status, 401);

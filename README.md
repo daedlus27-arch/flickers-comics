@@ -1,7 +1,7 @@
 # Flickers Comics
 
-Website for Flickers Comics, an independent comic shop on GTA World. It's a static site hosted free on
-GitHub Pages. Every comic has its own page, and staff manage stock from a password-protected staff area.
+Website for Flickers Comics, an independent comic shop on GTA World, live at https://flickerscomics.github.io/.
+It's a static site hosted free on GitHub Pages. Every comic has its own page, and staff manage stock from a password-protected staff area.
 
 ## How it fits together
 
@@ -18,6 +18,11 @@ GitHub Pages. Every comic has its own page, and staff manage stock from a passwo
 
 **In the staff area** (`/admin/`): sign in with your username and password, change prices and stock,
 add or edit comics, upload cover photos, then **Publish changes**. The site updates in a minute or two.
+
+To change many comics at once, tick them (or tick **Select all**, which respects your search; hold Shift to
+select a range), then use the yellow bar to set a price, raise or lower prices by a percentage or an amount,
+set stock, or delete them. Nothing goes live until you publish, and **Discard** undoes everything.
+If your session ends while you have unpublished changes, you are asked to sign in again and your changes are kept.
 
 **By hand:** edit `data/products.json` on GitHub. One comic per line:
 

@@ -1,7 +1,7 @@
 /* Flickers Comics staff area.
    Staff sign in with a username and password. Stock is loaded from and published to the staff API
    (the Cloudflare Worker in worker/), which does the GitHub commit. No GitHub token is ever in the browser. */
-import { esc, money, fullTitle, metaLine, slug, coverHTML, placeholderCover } from "../js/shared.js";
+import { esc, money, fullTitle, metaLine, slug, coverHTML } from "../js/shared.js";
 
 const app = document.getElementById("app");
 const API = (app.dataset.api || "").replace(/\/+$/, "");
@@ -35,7 +35,40 @@ const sessionStore = {
 
 /* ---------- API ---------- */
 class ApiError extends Error { constructor(message, status) { super(message); this.status = status; } }
-async function api(path, { method = "GET", body } = {}) {
+/* If the session ends while there are unpublished edits, ask for the password again right here
+   instead of dropping to the sign in screen and losing the edits. Resolves true once signed back in. */
+function reauth() {
+  return new Promise(resolve => {
+    const dlg = document.createElement("dialog");
+    dlg.className = "prompt";
+    dlg.setAttribute("aria-labelledby", "reTitle");
+    dlg.innerHTML = `<form novalidate><div class="co-head"><h2 class="dialog-title" id="reTitle">Sign in again</h2></div>
+      <div class="adm-card-body"><p>Your session ended. Sign in again as <b>${esc(S.user.username)}</b> to keep your unpublished changes.</p>
+      <div class="field"><label for="re-pw">Password</label><input id="re-pw" type="password" autocomplete="current-password"></div>
+      <p class="form-error" id="re-err" role="alert"></p>
+      <div class="ed-actions"><button type="button" class="btn btn-small" id="re-cancel">Give up and sign out</button><button type="submit" class="btn btn-yellow btn-small">Sign in</button></div></div></form>`;
+    document.body.appendChild(dlg);
+    let done = false;
+    const finish = ok => { if (done) return; done = true; dlg.close(); dlg.remove(); resolve(ok); };
+    dlg.addEventListener("cancel", ev => { ev.preventDefault(); }); // Esc does nothing: the choice must be explicit
+    dlg.querySelector("#re-cancel").addEventListener("click", () => finish(false));
+    dlg.querySelector("form").addEventListener("submit", async ev => {
+      ev.preventDefault();
+      try {
+        const res = await fetch(API + "/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: S.user.username, password: dlg.querySelector("#re-pw").value }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { dlg.querySelector("#re-err").textContent = data.error || "That didn't work. Try again."; return; }
+        Object.assign(S, { token: data.token, exp: data.exp, user: data.user });
+        sessionStore.save({ token: data.token, exp: data.exp, user: data.user }, false);
+        finish(true);
+      } catch (e) { dlg.querySelector("#re-err").textContent = "Couldn't reach the staff service. Try again."; }
+    });
+    dlg.showModal();
+    dlg.querySelector("#re-pw").focus();
+  });
+}
+async function api(path, opts = {}, retried = false) {
+  const { method = "GET", body } = opts;
   let res;
   try {
     res = await fetch(API + path, {
@@ -46,7 +79,10 @@ async function api(path, { method = "GET", body } = {}) {
   } catch (e) { throw new ApiError("Couldn't reach the staff service. Check your connection and try again.", 0); }
   let data = {}; try { data = await res.json(); } catch (e) { /* no body */ }
   if (!res.ok) {
-    if (res.status === 401 && S.token) { endSession("Your session has ended. Sign in again."); }
+    if (res.status === 401 && S.token) {
+      if (!retried && S.user && S.draft.length && changeList().count > 0 && await reauth()) return api(path, opts, true);
+      endSession("Your session has ended. Sign in again.");
+    }
     throw new ApiError(data.error || `The staff service answered ${res.status}.`, res.status);
   }
   return data;
@@ -457,7 +493,7 @@ function fieldVisibility() {
   $("ed-variant-label").textContent = cat === "funko" ? "Finish" : "Variant";
 }
 function formProduct() {
-  const dlg = $("editDlg"), vis = k => !F(k).closest("[data-for]") || !F(k).closest("[data-for]").hidden;
+  const vis = k => !F(k).closest("[data-for]") || !F(k).closest("[data-for]").hidden;
   const val = k => (vis(k) ? F(k).value.trim() : "");
   const base = ED.isNew ? {} : clone(S.draft.find(p => p.id === ED.id) || {});
   return Object.assign(base, {
