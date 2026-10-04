@@ -90,7 +90,7 @@ window.FLICKERS_CATEGORIES = [
 ];
 
 window.FLICKERS_PRODUCTS = [
-  {"id":"vv-1","cat":"issues","title":"Batman #14","num":"14","publisher":"DC Comics","price":750,"stock":32,"blurb":"FRACTION AND SCALERA TURN UP THE HEAT ON BAD SEEDS WITH THE COLDEST VILLAIN IN TOWN! As the night wears on and the threat of dawn looms, Batman must search for answers from the one man capable of stopping Ivy and the bloom. Elsewhere, Verity Pennyworth must defend the Manor from all manner of threats—and they're about to discover they picked the wrong house to mess with.","badges":["new"],"image":"assets/covers/vv-1-muu28owi.jpg","art":{"motif":"mecha","pal":1}}
+  {"id":"vv-1","cat":"issues","title":"Batman","num":"#14","publisher":"DC Comics","price":750,"stock":32,"blurb":"FRACTION AND SCALERA TURN UP THE HEAT ON BAD SEEDS WITH THE COLDEST VILLAIN IN TOWN! As the night wears on and the threat of dawn looms, Batman must search for answers from the one man capable of stopping Ivy and the bloom. Elsewhere, Verity Pennyworth must defend the Manor from all manner of threats—and they're about to discover they picked the wrong house to mess with.","badges":["new"],"image":"assets/covers/vv-1-muu28owi.jpg","art":{"motif":"mecha","pal":1}}
 ];
 
 window.FLICKERS_NEW_THIS_WEEK = ["vv-1"];
