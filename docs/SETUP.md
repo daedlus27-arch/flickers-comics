@@ -19,7 +19,7 @@ You do this setup once. It takes about 20 minutes and costs nothing.
 ## 1. Make a GitHub token for the Worker
 
 1. GitHub → your avatar → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
-2. **Repository access:** *Only select repositories* → `flickers-comics`.
+2. **Repository access:** *Only select repositories* → `flickerscomics.github.io`.
 3. **Permissions → Repository permissions → Contents: Read and write.** Nothing else.
 4. Set the longest expiry you're comfortable with and copy the token. Put a reminder in your calendar to renew it.
 
