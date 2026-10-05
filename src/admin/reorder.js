@@ -23,8 +23,8 @@ export async function renderReorder() {
       <thead><tr><th scope="col"><span class="sr-only">Include</span></th><th scope="col">Comic</th><th scope="col">On shelf</th><th scope="col">Waiting</th><th scope="col">Sold (${data.weeks} wks)</th><th scope="col">Order</th></tr></thead>
       <tbody>${rows.map(r => `<tr><td><input type="checkbox" data-pick="${esc(r.p.id)}" aria-label="Include ${esc(fullTitle(r.p))}"${skip.has(r.p.id) ? "" : " checked"}></td>
         <th scope="row">${esc(fullTitle(r.p))}${r.p.publisher ? `<br><span class="hint">${esc(r.p.publisher)}</span>` : ""}</th>
-        <td>${r.stock <= 0 ? '<span class="pill">Sold out</span>' : r.stock}</td><td>${r.waiting || "–"}</td><td>${r.sold || "–"}</td>
-        <td><input class="reorder-qty" type="number" min="0" max="999" step="1" inputmode="numeric" value="${r.suggested}" data-qty="${esc(r.p.id)}" aria-label="Copies of ${esc(fullTitle(r.p))} to order"></td></tr>`).join("")}</tbody></table>`
+        <td data-label="On shelf">${r.stock <= 0 ? '<span class="pill">Sold out</span>' : r.stock}</td><td data-label="Waiting">${r.waiting || "–"}</td><td data-label="Sold (${data.weeks} wks)">${r.sold || "–"}</td>
+        <td data-label="Order"><input class="reorder-qty" type="number" min="0" max="999" step="1" inputmode="numeric" value="${r.suggested}" data-qty="${esc(r.p.id)}" aria-label="Copies of ${esc(fullTitle(r.p))} to order"></td></tr>`).join("")}</tbody></table>`
     : `<p class="admin-empty">Nothing needs reordering right now. Everything has more than ${LOW} copies and nobody is waiting.</p>`}
     ${requests}`;
   if (!rows.length) return;
