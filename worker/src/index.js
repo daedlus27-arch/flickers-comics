@@ -18,6 +18,7 @@
 
 import { HttpError, bad } from "./http.js";
 import { placeOrder, lookupOrder, listOrders, sendTestMessage, updateOrder } from "./orders.js";
+import { createWant, listWants, updateWant, deleteWant, announceRestocks, announceNewIssues } from "./wants.js";
 import { gh, readStock, branchName, serializeProducts, mergeStock } from "./github.js";
 
 const PBKDF2_ITERATIONS = 100000; // Cloudflare Workers allows at most 100,000
@@ -215,6 +216,9 @@ async function publish(env, user, body) {
   const newTree = await gh(env, "/git/trees", { method: "POST", body: { base_tree: commit.tree.sha, tree } });
   const newCommit = await gh(env, "/git/commits", { method: "POST", body: { message: `Update stock (${user.username}): ${parts.join(", ") || "photos"}`, tree: newTree.sha, parents: [current.head] } });
   await gh(env, `/git/refs/heads/${branchName(env)}`, { method: "PATCH", body: { sha: newCommit.sha, force: false } });
+  // tell staff who was waiting for anything that's back, or for a new issue of a followed series (best effort: the publish already succeeded)
+  try { await announceRestocks(env, current.products, products); await announceNewIssues(env, current.products, products); }
+  catch (e) { console.error("Couldn't post wanted-list alerts"); }
   return { ok: true, version: productsBlob.sha, commit: newCommit.sha, ...(merged ? { merged, products } : {}) };
 }
 
@@ -274,6 +278,7 @@ async function route(request, env) {
 
   if (method === "POST" && path === "/orders") return placeOrder(env, await readJson(request), ip);
   if (method === "POST" && path === "/orders/lookup") return lookupOrder(env, await readJson(request), ip);
+  if (method === "POST" && path === "/wants") return createWant(env, await readJson(request), ip);
 
   const user = await authenticate(request, env);
 
@@ -296,6 +301,10 @@ async function route(request, env) {
 
   if (method === "GET" && path === "/orders") return { orders: await listOrders(env), ordersOpen: String(env.ORDERS_ENABLED) === "true", discord: !!env.DISCORD_WEBHOOK_URL };
   if (method === "POST" && path === "/orders/test") return sendTestMessage(env, user);
+  if (method === "GET" && path === "/wants") return { wants: await listWants(env) };
+  const wm = /^\/wants\/([^/]+)$/.exec(path);
+  if (wm && method === "POST") return updateWant(env, wm[1], await readJson(request), user);
+  if (wm && method === "DELETE") return deleteWant(env, wm[1]);
   const om = /^\/orders\/([^/]+)$/.exec(path);
   if (method === "POST" && om) return updateOrder(env, om[1], await readJson(request), user);
 

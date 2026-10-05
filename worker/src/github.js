@@ -67,7 +67,7 @@ export async function adjustStock(env, changes, message) {
       if (attempt < 3 && e instanceof HttpError) continue; // somebody committed first: start again from the new head
       throw e;
     }
-    return { products };
+    return { products, before: cur.products };
   }
 }
 

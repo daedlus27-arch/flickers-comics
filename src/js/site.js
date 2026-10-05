@@ -1,7 +1,7 @@
 /* Flickers Comics storefront.
    The shelves and comic pages are rendered at build time (see build/). This script adds the cart,
    quick view, checkout, search and filters on top. Stock and prices come from data/shop.json. */
-import { esc, escLines, money, GRADES, catOf, fullTitle, stockWord, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "../shared.mjs";
+import { searchItems, esc, escLines, money, GRADES, catOf, fullTitle, stockWord, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "../shared.mjs";
 
 const root = document.body.dataset.root || "";
 const $ = id => document.getElementById(id);
@@ -88,7 +88,7 @@ function setQty(id, n) {
 
 /* ===================== shelves ===================== */
 const grid = $("grid");
-const filters = { group: "all", q: "", sort: "featured" };
+const filters = { group: "all", q: "", sort: "featured", instock: false, novar: false, last: false, max: 0 };
 const SORTS = ["featured", "price-asc", "price-desc", "title"];
 // The shelf (publisher or category tab), search and sort live in the address, e.g. ?shelf=DC+Comics&sort=price-asc,
 // so a filtered shelf can be shared and the Back button keeps working. Other parameters are left alone.
@@ -98,13 +98,17 @@ function readUrlState() {
   if (q) { filters.q = q; if ($("q")) $("q").value = q; }
   if (SORTS.includes(s)) { filters.sort = s; if ($("sort")) $("sort").value = s; }
   if (g && document.querySelector(`.divider[data-group="${CSS.escape(g)}"]`)) filters.group = g;
+  for (const k of ["instock", "novar", "last"]) if (p.get(k) === "1" && document.querySelector(`[data-chip="${k}"]`)) filters[k] = true;
+  const max = Number(p.get("max")); if (max > 0 && $("maxPrice") && [...$("maxPrice").options].some(o => Number(o.value) === max)) { filters.max = max; $("maxPrice").value = String(max); }
 }
 function writeUrlState() {
   const p = new URLSearchParams(location.search);
-  ["shelf", "q", "sort"].forEach(k => p.delete(k));
+  ["shelf", "q", "sort", "instock", "novar", "last", "max"].forEach(k => p.delete(k));
   if (filters.group !== "all") p.set("shelf", filters.group);
   if (filters.q.trim()) p.set("q", filters.q.trim());
   if (filters.sort !== "featured") p.set("sort", filters.sort);
+  for (const k of ["instock", "novar", "last"]) if (filters[k]) p.set(k, "1");
+  if (filters.max) p.set("max", String(filters.max));
   const qs = p.toString();
   try { history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash); } catch (e) { /* ignore */ }
 }
@@ -112,7 +116,7 @@ function writeUrlState() {
 function applyFilters() {
   if (!grid) return;
   const cards = [...grid.querySelectorAll(".card")];
-  const q = filters.q.trim().toLowerCase();
+  const q = filters.q.trim();
   const num = c => Number(c.dataset.index), price = c => Number(c.dataset.price);
   const sorters = {
     featured: (a, b) => ((Number(b.dataset.stock) > 0) - (Number(a.dataset.stock) > 0)) || num(a) - num(b),
@@ -122,17 +126,24 @@ function applyFilters() {
   };
   cards.sort(sorters[filters.sort] || sorters.featured);
   let shown = 0;
-  cards.forEach(c => {
-    const ok = (filters.group === "all" || c.dataset.group === filters.group) && (!q || c.dataset.q.includes(q));
+  const found = searchItems(cards.map(c => ({ words: c.dataset.words.split(" "), blurb: c.dataset.blurb || "" })), q);
+  cards.forEach((c, i) => {
+    const stock = Number(c.dataset.stock), cost = price(c);
+    const ok = (filters.group === "all" || c.dataset.group === filters.group) && found.flags[i]
+      && (!filters.instock || stock > 0) && (!filters.novar || c.dataset.var !== "1") && (!filters.last || (stock >= 1 && stock <= 2)) && (!filters.max || cost <= filters.max);
     c.hidden = !ok;
     if (ok) shown++;
     grid.appendChild(c);
   });
+  document.querySelectorAll("[data-chip]").forEach(b => b.setAttribute("aria-pressed", String(!!filters[b.dataset.chip])));
+  const narrowed = filters.instock || filters.novar || filters.last || filters.max > 0;
+  if ($("clearFilters")) $("clearFilters").hidden = !narrowed;
   $("empty").hidden = shown > 0;
   writeUrlState();
   const tab = filters.group === "all" ? null : document.querySelector(`.divider[data-group="${CSS.escape(filters.group)}"]`);
   const label = filters.group === "all" ? "" : ` in ${tab && tab.firstChild ? tab.firstChild.textContent : filters.group}`;
-  $("results").textContent = shown ? `${shown} ${shown === 1 ? "item" : "items"}${label}${q ? ` matching “${filters.q.trim()}”` : ""}` : "";
+  const how = found.mode === "close" ? ", close matches" : found.mode === "blurb" ? ", found in descriptions" : "";
+  $("results").textContent = shown ? `${shown} ${shown === 1 ? "item" : "items"}${label}${q ? ` matching “${q}”${how}` : ""}${narrowed ? ", filtered" : ""}` : "";
 }
 function setGroup(g) {
   filters.group = g;
@@ -151,7 +162,9 @@ function stockHTML(p) {
   if (n) parts.push(`<span class="incart">${n} in your cart</span>`);
   return parts.join(" · ");
 }
+function wantsOn() { return !!(CONFIG && CONFIG.orderApi && !CONFIG.testMode); }
 function addState(p) {
+  if (p.stock <= 0 && wantsOn()) return { off: false, label: "Notify me", notify: true };
   if (p.stock <= 0) return { off: true, label: "Sold out" };
   if (cartQty(p.id) >= p.stock) return { off: true, label: "All in cart" };
   return { off: false, label: "Add" };
@@ -162,7 +175,7 @@ function refreshCards() {
     const btn = card.querySelector(".add"), st = addState(p), t = fullTitle(p);
     card.querySelector(".stock").innerHTML = stockHTML(p);
     btn.setAttribute("aria-disabled", String(st.off));
-    btn.setAttribute("aria-label", (st.off ? st.label + ": " : "Add to cart: ") + t);
+    btn.setAttribute("aria-label", st.notify ? "Notify me when it's back: " + t : (st.off ? st.label + ": " : "Add to cart: ") + t);
     if (!btn.classList.contains("added")) btn.textContent = st.label;
   });
 }
@@ -174,7 +187,7 @@ const pageBuyEl = document.querySelector("[data-buy]");
 let pageState = pageBuyEl ? { id: pageBuyEl.dataset.buy, qty: 1 } : null;
 const buyMax = p => Math.max(0, p.stock - cartQty(p.id));
 
-function buyHTML(p, st) {
+function buyCore(p, st) {
   const max = buyMax(p);
   st.qty = Math.min(Math.max(1, st.qty), Math.max(1, max));
   if (p.stock <= 0) return `<p class="qv-limit">This one is sold out.</p>`;
@@ -185,6 +198,11 @@ function buyHTML(p, st) {
       <button type="button" data-qv="inc" aria-label="One more" ${st.qty >= max ? "disabled" : ""}>+</button>
     </div>
     <button type="button" class="btn btn-yellow" data-qv="add">Add to cart · ${money(p.price * st.qty)}</button>`;
+}
+const SAVE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.7 3.7 4.5 7 4.5c2 0 3.7 1.1 5 3 1.3-1.9 3-3 5-3 3.3 0 5.4 3.2 4.2 6.6-1.700 4.800-9.200 9.400-9.200 9.400z"/></svg>';
+function buyHTML(p, st) {
+  const live = wantsOn();
+  return buyCore(p, st) + `<div class="buy-extras">${p.stock <= 0 && live ? `<button type="button" class="btn btn-small btn-yellow" data-want="restock" data-id="${esc(p.id)}">Tell me when it's back</button>` : ""}<button type="button" class="link-btn save-link" data-save="${esc(p.id)}" aria-pressed="${isSaved(p.id)}">${SAVE_SVG}Save for later</button>${live ? `<button type="button" class="link-btn" data-want="series" data-id="${esc(p.id)}">Follow ${esc(p.title)}</button>` : ""}</div>`;
 }
 function renderPageBuy() { if (pageBuyEl && byId[pageState.id]) pageBuyEl.innerHTML = buyHTML(byId[pageState.id], pageState); }
 
@@ -264,6 +282,7 @@ function renderCartUI() {
   if (qv.open && qvState.id) { const keep = document.activeElement; renderQV(); if (keep && keep.dataset && keep.dataset.qv) focusFirst(qv, `[data-qv="${keep.dataset.qv}"]:not(:disabled)`, '[data-qv="add"]'); }
   if (pageBuyEl) renderPageBuy();
   if (co.open && !$("coFormView").hidden) renderSummary();
+  if (typeof savedDlg !== "undefined" && savedDlg.open) renderSavedLines();
 }
 function openDrawer() {
   if (qv.open) qv.close();
@@ -480,6 +499,128 @@ function handlePaymentReturn() {
   }
 }
 
+/* ===================== saved for later (wishlist) ===================== */
+// Kept in this browser only. Remembers each comic's stock when it was saved, so a sold-out comic can be flagged "Back in stock".
+const SAVED_KEY = "flickers-saved-v1";
+let saved = {};
+const savedDlg = $("saved");
+const sanitizeSaved = raw => {
+  const out = {};
+  if (raw && typeof raw === "object") for (const [id, v] of Object.entries(raw)) if (Object.hasOwn(byId, id)) out[id] = { s: Math.max(0, Math.floor(Number(v && v.s) || 0)) };
+  return out;
+};
+const isSaved = id => Object.hasOwn(saved, id);
+const persistSaved = () => store.set(SAVED_KEY, saved);
+const backInStock = id => isSaved(id) && saved[id].s <= 0 && byId[id].stock > 0;
+function toggleSave(id) {
+  const p = byId[id]; if (!p) return;
+  if (isSaved(id)) { delete saved[id]; toast(`Removed ${fullTitle(p)} from your saved list`); }
+  else { saved[id] = { s: p.stock }; toast(`Saved ${fullTitle(p)}`, { label: "View saved", fn: openSaved }); }
+  persistSaved(); syncSaved();
+}
+function syncSaved() {
+  const ids = Object.keys(saved), news = ids.filter(backInStock).length;
+  $("savedBtn").hidden = false;
+  $("savedCount").textContent = ids.length;
+  $("savedBtn").classList.toggle("has-news", news > 0);
+  $("savedBtn").setAttribute("aria-label", `Saved for later: ${ids.length} ${ids.length === 1 ? "comic" : "comics"}${news ? `, ${news} back in stock` : ""}`);
+  document.querySelectorAll("[data-save]").forEach(b => { b.hidden = false; b.setAttribute("aria-pressed", String(isSaved(b.dataset.save))); });
+  if (savedDlg.open) renderSavedLines();
+}
+function renderSavedLines() {
+  const ids = Object.keys(saved);
+  $("savedEmpty").hidden = ids.length > 0;
+  $("savedFoot").hidden = ids.length === 0;
+  $("savedLines").innerHTML = ids.map(id => {
+    const p = byId[id], t = fullTitle(p), left = p.stock - cartQty(id);
+    const status = p.stock <= 0 ? '<span class="low">Sold out</span>' : backInStock(id) ? '<span class="back">Back in stock</span>' : p.stock <= 2 ? `<span class="low">Only ${p.stock} left</span>` : "In stock";
+    return `<li class="line">
+      <div class="line-thumb">${cover(p, { lazy: false, sizes: "54px" })}</div>
+      <div>
+        <p class="line-title"><a href="${comicUrl(id)}">${esc(t)}</a></p>
+        <p class="line-meta">${money(p.price)} · ${status}</p>
+        <div class="line-actions">
+          <button type="button" class="btn btn-small${p.stock > 0 && left > 0 ? " btn-yellow" : ""}" data-add="${esc(id)}" aria-disabled="${p.stock <= 0 ? !wantsOn() : left <= 0}" aria-label="${p.stock <= 0 && wantsOn() ? "Notify me when it's back" : "Add to cart"}: ${esc(t)}">${p.stock <= 0 ? (wantsOn() ? "Notify me" : "Sold out") : left <= 0 ? "All in cart" : "Add to cart"}</button>
+        </div>
+      </div>
+      <div class="line-right"><button type="button" class="link-btn" data-save="${esc(id)}" aria-pressed="true" aria-label="Remove ${esc(t)} from saved">Remove</button></div>
+    </li>`;
+  }).join("");
+}
+function openSaved() {
+  if (qv.open) qv.close();
+  if (drawer.open) drawer.close();
+  renderSavedLines();
+  savedDlg.showModal();
+}
+function addAllSaved() {
+  let n = 0;
+  for (const id of Object.keys(saved)) if (addToCart(id, 1)) n++;
+  if (n) { bumpCart(); toast(`Added ${n} saved comic${n === 1 ? "" : "s"} to your cart`, { label: "View cart", fn: () => { savedDlg.close(); openDrawer(); } }); }
+  else toast("Nothing available to add. Those are sold out or already in your cart.");
+}
+const wishLink = () => new URL(`${root}?wish=${Object.keys(saved).join(",")}`, location.href).href;
+function loadSharedWish() {
+  let params;
+  try { params = new URLSearchParams(location.search); } catch (e) { return; }
+  const raw = params.get("wish");
+  if (raw === null) return;
+  params.delete("wish");
+  const qs = params.toString();
+  try { history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash); } catch (e) { /* ignore */ }
+  let added = 0, skipped = 0;
+  for (const id of raw.slice(0, 3000).split(",").slice(0, 60)) {
+    if (!Object.hasOwn(byId, id)) { skipped++; continue; }
+    if (!isSaved(id)) { saved[id] = { s: byId[id].stock }; added++; }
+  }
+  if (added) { persistSaved(); syncSaved(); toast(`Saved ${added} comic${added === 1 ? "" : "s"} from a shared list${skipped ? ` (${skipped} no longer in the shop)` : ""}`, { label: "View saved", fn: openSaved }); }
+  else toast(skipped ? "Those comics are no longer in the shop." : "Those comics were already on your saved list.");
+}
+
+/* ===================== wanted list: notify me, follow a series, request a comic ===================== */
+const wd = $("want"), wForm = $("wantForm");
+let wantCtx = null;
+const WANT_COPY = {
+  restock: p => ({ title: "Tell me when it's back", intro: `Leave your details and we'll let you know when ${fullTitle(p)} is back on the shelves.`, button: "Notify me", done: "You're on the list", msg: `We'll text you when ${fullTitle(p)} is back.` }),
+  series: p => ({ title: `Follow ${p.title}`, intro: `Follow ${p.title} and we'll let you know when a new issue arrives, so you can have it set aside.`, button: "Follow this series", done: "You're following it", msg: `We'll text you when a new issue of ${p.title} comes in.` }),
+  request: () => ({ title: "Request a comic", intro: "Can't find it on the shelves? Tell us what you're after and we'll see if we can get it in.", button: "Send request", done: "Request sent", msg: "We'll be in touch if we can get it in." })
+};
+function showWantButtons() { document.querySelectorAll("[data-want]").forEach(b => { b.hidden = !wantsOn(); }); document.querySelectorAll("[data-want-only]").forEach(e => { e.hidden = !wantsOn(); }); }
+function openWant(kind, id, prefill = "") {
+  const p = id ? byId[id] : null;
+  if (!WANT_COPY[kind] || (kind !== "request" && !p)) return;
+  wantCtx = { kind, id: p ? p.id : null };
+  const c = WANT_COPY[kind](p);
+  [qv, drawer, co, tr, savedDlg].forEach(d => { if (d.open) d.close(); });
+  $("wantTitle").textContent = c.title; $("wantIntro").textContent = c.intro; $("wantBtn").textContent = c.button;
+  $("wantTextField").hidden = kind !== "request";
+  $("w-text").value = prefill; $("wantError").textContent = "";
+  wForm.hidden = false; $("wantDone").hidden = true;
+  wd.showModal(); wd.scrollTop = 0;
+  (kind === "request" ? $("w-text") : $("w-name")).focus();
+}
+wForm.addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const name = $("w-name").value.trim(), phone = $("w-phone").value.trim(), text = $("w-text").value.trim(), err = $("wantError"), btn = $("wantBtn");
+  err.textContent = "";
+  if (wantCtx.kind === "request" && text.length < 3) { err.textContent = "Tell us which comic you're after."; $("w-text").focus(); return; }
+  if (name.length < 3) { err.textContent = "Enter your full name."; $("w-name").focus(); return; }
+  if (!/^[\d\s()+\-#]+$/.test(phone) || phone.replace(/\D/g, "").length < 4) { err.textContent = "Enter your phone number using digits only."; $("w-phone").focus(); return; }
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = "Sending…";
+  try {
+    const res = await fetch(CONFIG.orderApi.replace(/\/orders\/?$/, "") + "/wants", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: wantCtx.kind, productId: wantCtx.id || undefined, text: wantCtx.kind === "request" ? text : undefined, name, phone }) });
+    let data = {}; try { data = await res.json(); } catch (e) { /* no body */ }
+    if (!res.ok) { err.textContent = data.error || "We couldn't send that just now. Try again in a moment."; return; }
+    const c = WANT_COPY[wantCtx.kind](wantCtx.id ? byId[wantCtx.id] : null);
+    $("wantDoneTitle").textContent = data.already ? "You're already on the list" : c.done;
+    $("wantDoneMsg").textContent = data.already ? "We have your details for this already, so there's nothing more to do." : c.msg;
+    wForm.hidden = true; $("wantDone").hidden = false; $("wantDoneTitle").focus();
+    $("w-text").value = "";
+  } catch (e) { err.textContent = "We couldn't reach the shop just now. Check your connection and try again."; }
+  finally { btn.disabled = false; btn.textContent = label; }
+});
+
 /* ===================== sharing a cart ===================== */
 // A cart link looks like  /?cart=batman-14:2,flash-3:1  (comic id : quantity). Opening one adds those comics to the visitor's own cart.
 const cartLink = () => new URL(`${root}?cart=${Object.entries(cart).map(([id, n]) => `${id}:${n}`).join(",")}`, location.href).href;
@@ -589,6 +730,7 @@ function toast(msg, action) {
 /* ===================== events ===================== */
 function handleAdd(id, btn) {
   const p = byId[id]; if (!p) return;
+  if (p.stock <= 0 && wantsOn()) { openWant("restock", id); return; }
   if (!addToCart(id, 1)) { toast(p.stock <= 0 ? "That one is sold out." : "Every copy we have is already in your cart."); return; }
   bumpCart();
   if (btn) {
@@ -609,13 +751,16 @@ function buyAction(action, st, rerender, inDialog) {
 }
 
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-share-cart],[data-open],[data-add],.divider[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close],[data-copy],[data-track],[data-track-this],[data-track-again]");
+  const t = ev.target.closest("[data-want],[data-save],[data-share-saved],[data-share-cart],[data-open],[data-add],.divider[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close],[data-copy],[data-track],[data-track-this],[data-track-again]");
   if (!t) return;
   const d = t.dataset;
   if ("track" in d) { openTrack(); return; }
   if ("trackThis" in d) { openTrack(lastOrder, true); return; }
   if ("trackAgain" in d) { trForm.hidden = false; trResult.hidden = true; trResult.innerHTML = ""; $("t-id").value = ""; $("t-phone").value = ""; $("t-id").focus(); return; }
   if (d.copy) { copyText(d.copy, "Order number copied.", "Couldn't copy. Select the number and copy it by hand."); return; }
+  if (d.want) { openWant(d.want, d.id, d.want === "request" ? filters.q.trim() : ""); return; }
+  if (d.save) { toggleSave(d.save); return; }
+  if ("shareSaved" in d) { copyText(wishLink(), "List link copied. Anyone who opens it can save the same comics.", "Couldn't copy the link."); return; }
   if ("shareCart" in d) { copyText(cartLink(), "Cart link copied. Anyone who opens it gets these comics in their cart.", "Couldn't copy the link."); return; }
   if (d.open) {
     if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || ev.button) return; // let the link open normally
@@ -638,9 +783,16 @@ document.addEventListener("click", ev => {
   }
 });
 
-[qv, drawer, co, tr].forEach(dlg => dlg.addEventListener("click", ev => { if (ev.target === dlg) dlg.close(); }));
+[qv, drawer, co, tr, savedDlg, wd].forEach(dlg => dlg.addEventListener("click", ev => { if (ev.target === dlg) dlg.close(); }));
 co.addEventListener("close", () => { if (!$("coDoneView").hidden) resetCheckout(); });
 $("cartBtn").addEventListener("click", openDrawer);
+$("savedBtn").addEventListener("click", openSaved);
+$("savedAddAll").addEventListener("click", addAllSaved);
+savedDlg.addEventListener("close", () => { // once they have seen that a comic is back, stop flagging it
+  let changed = false;
+  for (const id of Object.keys(saved)) if (backInStock(id)) { saved[id].s = byId[id].stock; changed = true; }
+  if (changed) { persistSaved(); syncSaved(); }
+});
 $("checkoutBtn").addEventListener("click", openCheckout);
 form.addEventListener("submit", placeOrder);
 form.querySelectorAll('input[name="method"]').forEach(r => r.addEventListener("change", syncMethod));
@@ -650,7 +802,10 @@ form.querySelectorAll('input[name="method"]').forEach(r => r.addEventListener("c
 if ($("q")) {
   $("q").addEventListener("input", ev => { filters.q = ev.target.value; applyFilters(); });
   $("sort").addEventListener("change", ev => { filters.sort = ev.target.value; applyFilters(); });
-  $("clearSearch").addEventListener("click", () => { filters.q = ""; $("q").value = ""; setGroup("all"); $("q").focus(); });
+  $("clearSearch").addEventListener("click", () => { Object.assign(filters, { q: "", instock: false, novar: false, last: false, max: 0 }); $("q").value = ""; if ($("maxPrice")) $("maxPrice").value = "0"; setGroup("all"); $("q").focus(); });
+  document.querySelectorAll("[data-chip]").forEach(b => b.addEventListener("click", () => { filters[b.dataset.chip] = !filters[b.dataset.chip]; applyFilters(); }));
+  if ($("maxPrice")) $("maxPrice").addEventListener("change", ev => { filters.max = Number(ev.target.value) || 0; applyFilters(); });
+  if ($("clearFilters")) $("clearFilters").addEventListener("click", () => { Object.assign(filters, { instock: false, novar: false, last: false, max: 0 }); if ($("maxPrice")) $("maxPrice").value = "0"; applyFilters(); });
 }
 document.addEventListener("keydown", ev => {
   if (ev.key !== "/" || ev.ctrlKey || ev.metaKey || ev.altKey || !$("q")) return;
@@ -659,7 +814,10 @@ document.addEventListener("keydown", ev => {
   $("q").focus();
   $("q").scrollIntoView({ block: "center" });
 });
-window.addEventListener("storage", ev => { if (ev.key === CART_KEY) { cart = sanitizeCart(store.get(CART_KEY, {})); renderCartUI(); } });
+window.addEventListener("storage", ev => {
+  if (ev.key === CART_KEY) { cart = sanitizeCart(store.get(CART_KEY, {})); renderCartUI(); }
+  if (ev.key === SAVED_KEY) { saved = sanitizeSaved(store.get(SAVED_KEY, {})); syncSaved(); }
+});
 
 /* ===================== start ===================== */
 if (grid) { readUrlState(); setGroup(filters.group); }
@@ -672,10 +830,15 @@ try {
   renderHours();
   setInterval(renderHours, 60000);
   renderCartUI();
+  saved = sanitizeSaved(store.get(SAVED_KEY, {}));
+  syncSaved();
   applyFilters();
   handlePaymentReturn();
   enableTracking();
+  showWantButtons();
+  renderCartUI();
   loadSharedCart();
+  loadSharedWish();
 } catch (e) {
   // The pre-rendered pages still read fine without it; only the cart is unavailable.
   const btn = $("cartBtn");

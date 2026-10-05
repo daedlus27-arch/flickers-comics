@@ -32,7 +32,7 @@ globalThis.fetch = async (url, opts = {}) => {
   if (String(url).startsWith("http://localhost:8080/data/shop.json")) return new Response(fs.readFileSync(path.join(root, "dist/data/shop.json")), { status: 200 });
   if (String(url).startsWith("http://discord.local/")) {
     const m = JSON.parse(opts.body), e = m.embeds && m.embeds[0], edit = method === "PATCH";
-    if (e) console.log(`\n--- Discord ${edit ? "edit of an earlier message" : "message"} ---\n` + e.title + "\n" + e.description + "\n" + e.fields.map(f => "  " + f.name + ": " + f.value.replace(/\n/g, " | ")).join("\n") + "\n  [" + e.footer.text + "]\n-----------------------");
+    if (e) console.log(`\n--- Discord ${edit ? "edit of an earlier message" : "message"} ---\n` + e.title + "\n" + (e.description || "") + "\n" + (e.fields || []).map(f => "  " + f.name + ": " + f.value.replace(/\n/g, " | ")).join("\n") + (e.footer ? "\n  [" + e.footer.text + "]" : "") + (m.content ? "\n  (message text: " + m.content + ")" : "") + "\n-----------------------");
     else console.log("\n--- Discord follow-up ---\n" + m.content + "\n-----------------------");
     return ok(edit ? {} : { id: String(++discordN) });
   }

@@ -43,6 +43,43 @@ export function slug(s) {
   return String(s).toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "item";
 }
 
+/* ---------- search ----------
+   "bat 14" finds Batman #14, "#14" and "14" match issue numbers exactly, and a typo like "batmn" still finds Batman
+   (only when nothing matches exactly). Works on plain data so it can be tested in Node. */
+export const norm = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+export const wordsOf = s => norm(s).split(" ").filter(Boolean);
+export const seriesKey = p => norm(p.title) + (p.vol ? "|" + norm(p.vol) : "");
+
+function closeEnough(a, b) { // edit distance of at most `limit`, counting a swapped pair of letters as one edit
+  const limit = a.length <= 3 ? 0 : a.length <= 6 ? 1 : 2;
+  if (Math.abs(a.length - b.length) > limit) return false;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length] <= limit;
+}
+/* items: [{ words: string[], blurb: string }]. Returns { mode, flags } where flags[i] says whether item i matches.
+   mode is "all" (no query), "exact", "blurb" (found in the description), "close" (typo-tolerant) or "none". */
+export function searchItems(items, query) {
+  const tokens = wordsOf(query);
+  if (!tokens.length) return { mode: "all", flags: items.map(() => true) };
+  const isNum = t => /^\d+$/.test(t);
+  const strict = (it, t) => it.words.some(w => (isNum(t) ? w === t : w.startsWith(t)));
+  const attempts = [
+    ["exact", (it, t) => strict(it, t)],
+    ["blurb", (it, t) => strict(it, t) || (!isNum(t) && it.blurb.includes(t))],
+    ["close", (it, t) => strict(it, t) || (!isNum(t) && t.length >= 4 && it.words.some(w => w.length >= 4 && (closeEnough(t, w) || closeEnough(t, w.slice(0, t.length)))))]
+  ];
+  for (const [mode, test] of attempts) {
+    const flags = items.map(it => tokens.every(t => test(it, t)));
+    if (flags.some(Boolean)) return { mode, flags };
+  }
+  return { mode: "none", flags: items.map(() => false) };
+}
+
 /* ---------- opening hours ---------- */
 export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export const hLabel = h => `${h % 12 || 12}${h < 12 ? "AM" : "PM"}`;

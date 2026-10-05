@@ -1,5 +1,5 @@
 /* HTML templates for the pre-rendered site. Everything here runs at build time. */
-import { esc, money, fullTitle, metaLine, catOf, coverHTML, hoursText, DAYS, hoursShort, stockWord, GRADES } from "../src/shared.mjs";
+import { esc, money, fullTitle, metaLine, catOf, coverHTML, hoursText, DAYS, hoursShort, stockWord, GRADES, norm, wordsOf } from "../src/shared.mjs";
 
 const X = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
 export const SITE_NAME = "Flickers Comics";
@@ -62,6 +62,11 @@ export function header(root, { logo = "assets/flickers-logo.png" } = {}) {
     <a class="logo-link" href="${root || "./"}"><img class="logo" src="${root}${logo}" alt="Flickers Comics" width="640" height="104"></a>
     <div class="header-actions">
       <nav class="nav" aria-label="Main"><a href="${root}#shop">Shop</a><a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>
+      <button type="button" class="saved-btn" id="savedBtn" aria-haspopup="dialog" hidden>
+        ${HEART}
+        <span class="saved-word">Saved</span>
+        <span class="saved-count" id="savedCount">0</span>
+      </button>
       <button type="button" class="cart-btn" id="cartBtn" aria-haspopup="dialog">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>
         <span class="cart-word">Cart</span>
@@ -80,7 +85,7 @@ export function footer(root, cfg) {
     <img class="footer-logo" src="${root}assets/flickers-logo.png" alt="Flickers Comics" width="640" height="104" loading="lazy">
     <div class="footer-cols">
       <div><h2>Hours</h2><p>Every day, ${hoursText(cfg)}</p></div>
-      <div><h2>Orders</h2><p>Collect in store: free<br>Postage: ${money(cfg.postage)}</p><p class="footer-track"><button type="button" class="link-btn" data-track hidden>Track an order</button></p></div>
+      <div><h2>Orders</h2><p>Collect in store: free<br>Postage: ${money(cfg.postage)}</p><p class="footer-track"><button type="button" class="link-btn" data-track hidden>Track an order</button><br><button type="button" class="link-btn" data-want="request" hidden>Request a comic</button></p></div>
       <div><h2>Payment</h2><p>${cfg.payOnline ? "Pay from your bank account<br>through Fleeca" : "Online payment through<br>Fleeca is coming soon"}</p></div>
     </div>
     <p class="fine">© Flickers Comics. All prices in dollars. <a class="footer-link" href="${root}admin/">Staff login</a></p>
@@ -110,6 +115,25 @@ export function dialogs(cfg) {
     <p class="hint">Choose collection or postage at checkout.</p>
     <p class="share-cart"><button type="button" class="link-btn" data-share-cart>Copy a link to this cart</button> <span class="hint">Send it to a friend and they get the same comics in their cart.</span></p>
     <button type="button" class="btn btn-yellow btn-block" id="checkoutBtn">Checkout</button>
+  </div>
+</dialog>
+
+<dialog class="drawer saved" id="saved" aria-labelledby="savedTitle">
+  <div class="drawer-head">
+    <h2 class="dialog-title" id="savedTitle">Saved for later</h2>
+    <button type="button" class="icon-btn on-dark" data-close aria-label="Close saved list">${X}</button>
+  </div>
+  <div class="drawer-body">
+    <ul class="lines" id="savedLines"></ul>
+    <div class="cart-empty" id="savedEmpty" hidden>
+      <p class="empty-title">Nothing saved yet</p>
+      <p class="hint">Tap the heart on a comic to keep it here. If it's sold out we'll flag it when it comes back.</p>
+      <button type="button" class="btn btn-yellow" data-close data-goto="shop">Browse the shelves</button>
+    </div>
+  </div>
+  <div class="drawer-foot" id="savedFoot">
+    <button type="button" class="btn btn-yellow btn-block" id="savedAddAll">Add all available to cart</button>
+    <p class="share-cart"><button type="button" class="link-btn" data-share-saved>Copy a link to this list</button> <span class="hint">Send it to a friend and they can save the same comics.</span></p>
   </div>
 </dialog>
 
@@ -201,6 +225,32 @@ export function dialogs(cfg) {
   </div>
 </dialog>
 
+<dialog class="checkout track want" id="want" aria-labelledby="wantTitle">
+  <div class="co-head">
+    <h2 class="dialog-title" id="wantTitle">Request</h2>
+    <button type="button" class="icon-btn on-dark" data-close aria-label="Close">${X}</button>
+  </div>
+  <div class="track-body">
+    <form id="wantForm" novalidate>
+      <p class="hint track-intro" id="wantIntro"></p>
+      <div class="field" id="wantTextField" hidden><label for="w-text">Which comic?</label><textarea id="w-text" rows="3" maxlength="300" placeholder="Title, issue number, and cover or variant if it matters"></textarea></div>
+      <div class="two">
+        <div class="field"><label for="w-name">Full name</label><input type="text" id="w-name" autocomplete="name" placeholder="e.g. Jamie Reyes"></div>
+        <div class="field"><label for="w-phone">Phone number</label><input type="text" id="w-phone" inputmode="tel" autocomplete="tel" placeholder="e.g. 5550142"></div>
+      </div>
+      <p class="hint want-fine">We only use your details to get in touch about this, and delete them after a few months.</p>
+      <p class="form-error" id="wantError" role="alert"></p>
+      <button type="submit" class="btn btn-yellow" id="wantBtn">Send</button>
+    </form>
+    <div id="wantDone" hidden>
+      <p class="eyebrow">All set</p>
+      <h3 class="track-status" id="wantDoneTitle" tabindex="-1">You're on the list</h3>
+      <p class="track-msg" id="wantDoneMsg"></p>
+      <p><button type="button" class="btn btn-yellow" data-close>Back to the shop</button></p>
+    </div>
+  </div>
+</dialog>
+
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>`;
 }
 
@@ -215,6 +265,10 @@ export function stickerHTML(p) {
   if (b.includes("new")) return `<span class="sticker sticker-new" aria-hidden="true">New!</span>`;
   return "";
 }
+export const isVariant = p => !!p.variant || (p.badges || []).includes("variant");
+const HEART = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.700 3.700 4.500 7 4.500c2 0 3.700 1.100 5 3 1.300-1.900 3-3 5-3 3.300 0 5.400 3.200 4.200 6.600-1.700 4.800-9.200 9.400-9.200 9.400z"/></svg>`;
+/* the save-for-later heart: hidden until the script switches it on */
+export const heartButton = (p, t, cls = "heart") => `<button type="button" class="${cls}" data-save="${esc(p.id)}" aria-pressed="false" aria-label="Save ${esc(t)} for later" hidden>${HEART}</button>`;
 export const comicUrl = (root, p) => `${root}comic/${p.id}/`;
 
 export function cardHTML(p, ctx, i) {
@@ -225,12 +279,13 @@ export function cardHTML(p, ctx, i) {
   if (p.staff) extras.push("staff pick");
   if (p.stock <= 0) extras.push("sold out");
   const low = p.stock <= 0 ? `<span class="low">Sold out</span>` : p.stock <= 2 ? `<span class="low">Only ${p.stock} left</span>` : "";
-  const q = [t, p.publisher, catOf(cats, p.cat).label, p.blurb].join(" ").toLowerCase();
+  const words = [...new Set(wordsOf([t, p.title, p.num, p.vol, p.subtitle, p.variant, p.publisher, catOf(cats, p.cat).label].join(" ")))].join(" ");
   const soldOff = p.stock <= 0;
-  return `<article class="card" data-id="${esc(p.id)}" data-group="${esc(groupKey(p))}" data-price="${p.price}" data-stock="${p.stock}" data-title="${esc(t.toLowerCase())}" data-index="${i}" data-q="${esc(q)}">
+  return `<article class="card" data-id="${esc(p.id)}" data-group="${esc(groupKey(p))}" data-price="${p.price}" data-stock="${p.stock}" data-var="${isVariant(p) ? 1 : 0}" data-title="${esc(t.toLowerCase())}" data-index="${i}" data-words="${esc(words)}" data-blurb="${esc(norm(p.blurb))}">
     <a class="cover-btn" href="${url}" data-open="${esc(p.id)}" aria-label="${esc(t)}${extras.length ? ", " + extras.join(", ") : ""}. View details">
       ${coverHTML(p, { imgBase: root })}${stickerHTML(p)}${p.staff ? `<span class="talker" aria-hidden="true">Staff pick!</span>` : ""}
     </a>
+    ${heartButton(p, t)}
     <div class="card-body">
       <p class="meta">${esc(metaLine(p, cats))}</p>
       <h3 class="title"><a href="${url}" data-open="${esc(p.id)}"><span class="clamp">${esc(t)}</span></a></h3>
@@ -314,7 +369,7 @@ ${header(root)}
           <label class="search">
             <span class="sr-only">Search the shelves</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            <input type="search" id="q" placeholder="Search titles or publishers" autocomplete="off" aria-keyshortcuts="/">
+            <input type="search" id="q" placeholder="Search titles, issues, publishers" autocomplete="off" aria-keyshortcuts="/">
           </label>
           <label class="sort"><span>Sort</span>
             <select id="sort">
@@ -326,15 +381,18 @@ ${header(root)}
           </label>
         </div>
       </div>
+      ${filterChips(products)}
       ${dividers ? `<div class="dividers" id="dividers" role="group" aria-label="Filter by ${ctx.groupBy === "cat" ? "category" : "publisher"}">${dividers}</div>` : ""}
       <p class="results" id="results" aria-live="polite">${total} ${total === 1 ? "item" : "items"}</p>
       <div class="grid" id="grid">
 ${cards}
       </div>
       <div class="empty" id="empty" hidden>
-        <p class="empty-title">Nothing on this shelf</p>
-        <p>Try a different word, or <button type="button" class="link-btn" id="clearSearch">show everything</button>.</p>
+        <p class="empty-title">Nothing matches that</p>
+        <p>Try a different word, or <button type="button" class="link-btn" id="clearSearch">clear the search and filters</button>.</p>
+        <p class="request-line" data-want-only hidden>Looking for something we don't stock? <button type="button" class="link-btn" data-want="request">Ask us to find it</button>.</p>
       </div>
+      <p class="request-line request-end" data-want-only hidden>Can't find what you're after? <button type="button" class="link-btn" data-want="request">Request a comic</button> and we'll see if we can get it in.</p>
     </div>
   </section>
 
@@ -343,6 +401,25 @@ ${cards}
 </main>
 ${footer(root, cfg)}
 ${dialogs(cfg)}`;
+}
+
+/* a handful of round price limits taken from what's actually on the shelves */
+function priceSteps(products) {
+  const all = products.map(p => p.price).sort((a, b) => a - b), top = all[all.length - 1];
+  const distinct = [...new Set(all)].filter(x => x < top);
+  if (distinct.length <= 5) return distinct;
+  // limits at roughly the 20th, 40th, 60th, 80th and 90th percentile of what's on the shelves
+  return [...new Set([0.2, 0.4, 0.6, 0.8, 0.9].map(q => all[Math.floor(q * (all.length - 1))]))].filter(x => x < top);
+}
+function filterChips(products) {
+  const steps = priceSteps(products);
+  return `<div class="chips" id="chips" role="group" aria-label="Narrow the shelves">
+        <button type="button" class="chip" data-chip="instock" aria-pressed="false">In stock</button>
+        ${products.some(isVariant) ? `<button type="button" class="chip" data-chip="novar" aria-pressed="false">Hide variants</button>` : ""}
+        <button type="button" class="chip" data-chip="last" aria-pressed="false">Last copies</button>
+        ${steps.length ? `<label class="chip chip-select"><span>Up to</span><select id="maxPrice" aria-label="Maximum price"><option value="0">Any price</option>${steps.map(s => `<option value="${s}">${money(s)}</option>`).join("")}</select></label>` : ""}
+        <button type="button" class="link-btn" id="clearFilters" hidden>Clear filters</button>
+      </div>`;
 }
 
 function howSection(cfg) {

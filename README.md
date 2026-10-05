@@ -65,6 +65,23 @@ the customer. Fleeca payment is a later step (`payOnline`). See `docs/DISCORD.md
 and quantity) adds those comics to the visitor's own cart, skipping anything sold out. Handy for setting a stack aside for a customer
 over the phone: build the cart, copy the link, send it.
 
+**Smart search and filters:** search understands partial words and issue numbers ("bat 14" finds Batman #14), ignores case and
+punctuation, and forgives typos when nothing matches exactly. Chips narrow the shelves to In stock, Hide variants, Last copies
+(1 or 2 left) and a price limit; they're saved in the address so a filtered shelf can be shared.
+
+**Saved for later:** every comic has a heart. Saved comics live in the visitor's browser (nothing is sent to the shop), show up under
+**Saved** in the header, can be added to the cart in one go, shared with a link, and are flagged **Back in stock** if they sold out
+after being saved.
+
+**The wanted list** (staff area → **Wanted**): customers can leave a name and phone number to
+- be told when a **sold-out comic is back** (*Notify me*),
+- **follow a series** so staff know to set aside each new issue (a pull list), or
+- **request a comic** the shop doesn't stock.
+
+New requests post to the orders Discord channel. When you restock a sold-out comic (or a cancelled order frees one), or add a new
+issue of a followed series, Discord lists exactly who to contact and the Wanted tab flags them "Ready to contact". Mark them contacted
+or remove them there. Nobody is texted automatically; staff make the call. Requests are deleted after 120 days.
+
 Customers can share a shelf with a link: `/?shelf=DC+Comics&sort=price-asc`. Pressing <kbd>/</kbd> jumps to the search box.
 
 ## Working on the site

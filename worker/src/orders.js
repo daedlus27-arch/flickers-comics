@@ -14,6 +14,9 @@
                           cancelled) move to the archive and are deleted 14 days after they finish. */
 import { HttpError, bad } from "./http.js";
 import { adjustStock } from "./github.js";
+import { loadShop, shopConfig, siteBase } from "./shop.js";
+import { escMd, cut, pingRole, webhook } from "./discord.js";
+import { announceRestocks } from "./wants.js";
 import { fullTitle, money, hoursText } from "../../src/shared.mjs";
 
 const ORDER_TTL = 90 * 24 * 3600;
@@ -23,25 +26,12 @@ const ORDER_ID_RE = /^FC-[A-Z2-9]{6}$/;
 const MAX_LINES = 40, MAX_QTY = 99, ORDERS_PER_WINDOW = 5, LOOKUPS_PER_WINDOW = 12, WINDOW_SECONDS = 600;
 
 const clean = (v, max) => String(v ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").trim().slice(0, max);
-const siteBase = env => String(env.SITE_URL || "").replace(/\/+$/, "");
 const digitsOf = s => String(s || "").replace(/\D/g, "");
 
 export function newOrderId() {
   const bytes = crypto.getRandomValues(new Uint8Array(6));
   return "FC-" + [...bytes].map(b => ID_ALPHABET[b % 32]).join("");
 }
-
-/* ---------- the catalog, as customers see it ---------- */
-export async function loadShop(env) {
-  const base = siteBase(env);
-  if (!base) throw bad(503, "Online ordering isn't set up yet.");
-  let res;
-  try { res = await fetch(`${base}/data/shop.json`, { headers: { Accept: "application/json" } }); }
-  catch (e) { throw bad(503, "Couldn't check the shop's stock just now. Try again in a moment."); }
-  if (!res.ok) throw bad(503, "Couldn't check the shop's stock just now. Try again in a moment.");
-  try { return await res.json(); } catch (e) { throw bad(503, "Couldn't check the shop's stock just now. Try again in a moment."); }
-}
-const shopConfig = async env => { try { return (await loadShop(env)).config || {}; } catch (e) { return {}; } };
 
 /* ---------- status ---------- */
 export const STATUSES = ["new", "ready", "done", "cancelled"];
@@ -113,8 +103,6 @@ export function buildOrder(raw, shop, { test = false } = {}) {
 }
 
 /* ---------- Discord ---------- */
-const escMd = s => String(s).replace(/([\\*_~`|>])/g, "\\$1").replace(/</g, "\\<");
-const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const STATUS_COLOR = { new: 0xFFE912, ready: 0x1EA7E1, done: 0x23A55A, cancelled: 0x949BA4 };
 
 export function orderEmbed(o, cfg = {}) {
@@ -156,32 +144,6 @@ export function orderEmbed(o, cfg = {}) {
     timestamp: o.placedAt
   };
 }
-
-/* One call to the webhook, with a single retry if Discord says slow down. The URL is a secret: never logged, never returned. */
-async function webhook(env, { method = "POST", messageId, wait = false, payload }) {
-  const raw = String(env.DISCORD_WEBHOOK_URL || "").trim(); // a pasted secret can pick up a stray space or line break
-  if (!raw) return { ok: false, reason: "not configured" };
-  let url;
-  try { url = new URL(raw); } catch (e) { return { ok: false, reason: "the webhook address isn't valid" }; }
-  if (messageId) url.pathname = url.pathname.replace(/\/+$/, "") + "/messages/" + encodeURIComponent(messageId);
-  if (wait) url.searchParams.set("wait", "true");
-  for (let attempt = 0; attempt < 2; attempt++) {
-    let res;
-    try { res = await fetch(url.toString(), { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); }
-    catch (e) { console.error("Discord unreachable"); continue; }
-    if (res.ok) { let data = {}; try { data = await res.json(); } catch (e) { /* no body */ } return { ok: true, id: data && data.id }; }
-    if (res.status === 429) {
-      let wait = 1;
-      try { wait = Math.min(3, Number((await res.json()).retry_after) || 1); } catch (e) { /* default */ }
-      await new Promise(r => setTimeout(r, wait * 1000));
-      continue;
-    }
-    console.error("Discord answered", res.status); // the status only
-    return { ok: false, reason: `Discord answered ${res.status}` };
-  }
-  return { ok: false, reason: "Discord didn't answer" };
-}
-const pingRole = env => (/^\d{5,25}$/.test(String(env.DISCORD_PING_ROLE || "")) ? String(env.DISCORD_PING_ROLE) : null);
 
 export async function postToDiscord(env, order, cfg) {
   const role = pingRole(env);
@@ -307,7 +269,7 @@ export async function updateOrder(env, id, patch, user) {
   const warnings = [], changes = [], lines = o.items.map(i => [i.id, i.qty]);
   if (statusChanged) {
     if (next === "cancelled" && o.stock === "held") {
-      try { await adjustStock(env, lines, `Order ${o.id} cancelled: comics put back on the shelf`); o.stock = "released"; }
+      try { const r = await adjustStock(env, lines, `Order ${o.id} cancelled: comics put back on the shelf`); o.stock = "released"; await announceRestocks(env, r.before, r.products).catch(() => {}); }
       catch (e) { o.stock = "restore-failed"; warnings.push("The order was cancelled, but the comics couldn't be put back in stock automatically. Add them back under Stock."); }
     } else if (prev === "cancelled" && next !== "cancelled" && o.stock === "released") {
       try { await adjustStock(env, lines.map(([i, q]) => [i, -q]), `Order ${o.id} reopened: comics taken off the shelf again`); o.stock = "held"; }
