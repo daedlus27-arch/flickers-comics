@@ -1,0 +1,19 @@
+{
+  "extends": ["html-validate:recommended"],
+  "rules": {
+    "doctype-style": "off",
+    "no-inline-style": "off",
+    "no-trailing-whitespace": "off",
+    "void-style": "off",
+    "attribute-boolean-style": "off",
+    "attribute-empty-style": "off",
+    "long-title": "off",
+    "no-implicit-button-type": "off",
+    "prefer-native-element": "off",
+    "no-redundant-role": "off",
+    "require-sri": "off",
+    "wcag/h30": "off",
+    "wcag/h32": "off",
+    "wcag/h37": "off"
+  }
+}

@@ -191,7 +191,7 @@ function renderShell() {
   const owner = S.user.role === "owner";
   app.innerHTML = `<div class="adm-wrap">
     <div class="adm-top">
-      <h1>Stock manager</h1>
+      <h1>Shop manager</h1>
       <div class="adm-who"><span>Signed in as <b>${esc(S.user.username)}</b>${owner ? " (owner)" : ""}</span><button type="button" class="link-btn" id="signOut">Sign out</button></div>
     </div>
     <div class="adm-tabs" role="tablist" aria-label="Staff area">
@@ -241,10 +241,19 @@ function renderStock() {
     </div>
     <div class="list-head">
       <label class="check"><input type="checkbox" id="selAll"><span id="selAllLabel">Select all</span></label>
-      <span class="hint">Tip: tick one comic, then hold Shift and tick another to select everything between.</span>
+      <label class="list-pick">Show <select id="aFilter" class="admin-select">
+        <option value="all">Everything</option><option value="low">Low stock (1 or 2 left)</option><option value="sold">Sold out</option><option value="changed">Unpublished changes</option>
+      </select></label>
+      <label class="list-pick">Sort <select id="aSort" class="admin-select">
+        <option value="shop">Shop order</option><option value="title">Title A to Z</option><option value="price-asc">Price, low to high</option><option value="price-desc">Price, high to low</option><option value="stock-asc">Stock, fewest first</option>
+      </select></label>
+      <span class="hint" id="aShowing" aria-live="polite"></span>
     </div>
+    <p class="hint list-tip">Tip: tick one comic, then hold Shift and tick another to select everything between.</p>
     <div id="aList"></div>`;
   $("aQ").addEventListener("input", renderList);
+  $("aFilter").addEventListener("change", renderList);
+  $("aSort").addEventListener("change", renderList);
   $("selAll").addEventListener("change", () => {
     const vis = visibleList();
     if ($("selAll").checked) vis.forEach(p => S.selected.add(p.id)); else vis.forEach(p => S.selected.delete(p.id));
@@ -304,9 +313,24 @@ function rowPills(p, c) {
   if (p.stock <= 0) pills.push(`<span class="pill">Sold out</span>`);
   return pills.join("");
 }
+const STOCK_SORTS = {
+  title: (a, b) => label(a).localeCompare(label(b), "en", { numeric: true, sensitivity: "base" }),
+  "price-asc": (a, b) => a.price - b.price || label(a).localeCompare(label(b)),
+  "price-desc": (a, b) => b.price - a.price || label(a).localeCompare(label(b)),
+  "stock-asc": (a, b) => a.stock - b.stock || label(a).localeCompare(label(b))
+};
 function visibleList() {
-  const q = ($("aQ").value || "").trim().toLowerCase();
-  return S.draft.filter(p => !q || [label(p), p.publisher].join(" ").toLowerCase().includes(q));
+  const q = ($("aQ").value || "").trim().toLowerCase(), filter = $("aFilter").value;
+  const c = filter === "changed" ? changeList() : null;
+  const list = S.draft.filter(p => {
+    if (q && ![label(p), p.publisher].join(" ").toLowerCase().includes(q)) return false;
+    if (filter === "low") return p.stock >= 1 && p.stock <= 2;
+    if (filter === "sold") return p.stock <= 0;
+    if (filter === "changed") return c.edited.has(p.id) || c.added.has(p.id);
+    return true;
+  });
+  const sorter = STOCK_SORTS[$("aSort").value];
+  return sorter ? list.sort(sorter) : list;
 }
 function renderList() {
   const c = updateCounts();
@@ -321,7 +345,9 @@ function renderList() {
       <label class="arow-field arow-stock">Stock<input type="number" min="0" step="1" inputmode="numeric" data-stock="${esc(p.id)}" value="${esc(p.stock)}" aria-label="Copies of ${esc(t)} in stock"></label>
       <button type="button" class="btn btn-small arow-edit" data-edit="${esc(p.id)}" aria-label="Edit ${esc(t)}">Edit</button>
     </div>`;
-  }).join("") : `<p class="admin-empty">${S.draft.length ? "Nothing matches that search." : "No stock yet. Click “+ Add item” to add the first one."}</p>`;
+  }).join("") : `<p class="admin-empty">${S.draft.length ? "Nothing matches that search or filter." : "No stock yet. Click “+ Add item” to add the first one."}</p>`;
+  const narrowed = list.length !== S.draft.length;
+  $("aShowing").textContent = S.draft.length ? (narrowed ? `Showing ${list.length} of ${S.draft.length}` : `${S.draft.length} in stock list`) : "";
   updateSelection();
 }
 
@@ -334,8 +360,8 @@ function updateSelection() {
   all.checked = vis.length > 0 && ticked === vis.length;
   all.indeterminate = ticked > 0 && ticked < vis.length;
   all.disabled = vis.length === 0;
-  const searching = ($("aQ").value || "").trim() !== "";
-  $("selAllLabel").textContent = searching ? `Select all ${vis.length} matching` : `Select all ${vis.length}`;
+  const narrowed = ($("aQ").value || "").trim() !== "" || $("aFilter").value !== "all";
+  $("selAllLabel").textContent = narrowed ? `Select all ${vis.length} matching` : `Select all ${vis.length}`;
   const n = S.selected.size;
   $("bulkBar").hidden = n === 0;
   $("bulkCount").textContent = `${n} selected`;
@@ -642,36 +668,119 @@ async function publish() {
 }
 
 /* ---------- orders tab ---------- */
+const orderStatus = o => o.status || "new";
+const STATUS_NAME = o => ({ new: "New", ready: "Ready", done: o.method === "post" ? "Posted" : "Collected", cancelled: "Cancelled" })[orderStatus(o)];
+const HISTORY_NAME = (change, o) => ({ new: "Reopened", ready: "Marked ready", done: o.method === "post" ? "Marked posted" : "Marked collected", cancelled: "Cancelled", paid: "Marked paid", unpaid: "Marked unpaid" })[change] || change;
+const ORDER_FILTERS = [
+  ["open", "Open", o => orderStatus(o) === "new" || orderStatus(o) === "ready"],
+  ["done", "Finished", o => orderStatus(o) === "done"],
+  ["cancelled", "Cancelled", o => orderStatus(o) === "cancelled"],
+  ["all", "All", () => true]
+];
+const orderWhen = iso => new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+
+/* A spreadsheet opens a cell that starts with = + - or @ as a formula, so typed text like that is defused with a leading quote. */
+function csvCell(v) {
+  let s = String(v ?? "");
+  if (/^[=@\t\r]/.test(s) || (/^[+-]/.test(s) && !/^[+-]?[\d\s()-]+$/.test(s))) s = "'" + s;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function ordersCsv(orders) {
+  const head = ["Order", "Placed", "Status", "Paid", "Customer", "Phone", "Method", "Collect on", "Address", "Items", "Subtotal", "Postage", "Total", "Notes"];
+  const rows = orders.map(o => [o.id, o.placedAt, STATUS_NAME(o), o.paid ? "Yes" : "No", o.name, o.phone, o.method === "post" ? "Post" : "Collect", o.collectDate || "", o.address || "",
+    o.items.map(i => `${i.qty} x ${i.title}`).join("; "), o.subtotal, o.postage, o.total, o.notes || ""]);
+  return "﻿" + [head, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+}
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function orderHTML(o, isOpen) {
+  const s = orderStatus(o), finish = o.method === "post" ? "Mark posted" : "Mark collected";
+  const btn = (attrs, text, cls = "") => `<button type="button" class="btn btn-small ${cls}" data-oid="${esc(o.id)}" ${attrs}>${text}</button>`;
+  const actions = [];
+  if (s === "new") actions.push(btn('data-status="ready"', "Mark ready", "btn-yellow"), btn('data-status="done"', finish));
+  if (s === "ready") actions.push(btn('data-status="done"', finish, "btn-yellow"), btn('data-status="new"', "Back to new"));
+  if (s === "done" || s === "cancelled") actions.push(btn('data-status="new"', "Reopen"));
+  actions.push(btn(`data-paid="${o.paid ? "no" : "yes"}"`, o.paid ? "Mark unpaid" : "Mark paid"));
+  if (s === "new" || s === "ready") actions.push(btn('data-status="cancelled"', "Cancel order", "btn-danger"));
+  const history = [`Placed by the customer · ${orderWhen(o.placedAt)}`, ...(o.history || []).map(h => `${HISTORY_NAME(h.change, o)} by ${h.by} · ${orderWhen(h.at)}`)];
+  const pillClass = { new: "pill-edit", ready: "pill-added", done: "", cancelled: "pill-void" }[s];
+  return `<details class="order${s === "cancelled" ? " is-cancelled" : ""}" data-order="${esc(o.id)}"${isOpen ? " open" : ""}>
+    <summary><b>${esc(o.id)}</b> <span>${esc(orderWhen(o.placedAt))}</span> <span>${esc(o.name)}</span> <span class="pill">${o.method === "post" ? "Post" : "Collect"}</span> <span class="pill ${pillClass}">${esc(STATUS_NAME(o))}</span>${o.paid ? ' <span class="pill pill-added">Paid</span>' : ""}${/^failed/.test(o.discord || "") ? ' <span class="pill pill-edit">Not posted to Discord</span>' : ""} <b class="order-total">${money(o.total)}</b></summary>
+    <dl class="done-dl">
+      <dt>Phone</dt><dd>${esc(o.phone)}</dd>
+      ${o.method === "collect" ? `<dt>Collect on</dt><dd>${esc(o.collectDate)}</dd>` : `<dt>Post to</dt><dd>${escLines(o.address)}</dd>`}
+      <dt>Items</dt><dd>${o.items.map(i => `${i.qty} × ${esc(i.title)} · ${money(i.price * i.qty)}`).join("<br>")}</dd>
+      <dt>Total</dt><dd>${money(o.total)}${o.postage ? ` (incl. ${money(o.postage)} postage)` : ""}</dd>
+      <dt>Payment</dt><dd>${o.paid ? "Paid" : "Not paid yet"}</dd>
+      ${o.notes ? `<dt>Notes</dt><dd>${escLines(o.notes)}</dd>` : ""}
+      <dt>History</dt><dd>${history.map(esc).join("<br>")}</dd>
+      <dt>Discord</dt><dd>${esc(o.discord || "")}</dd>
+    </dl>
+    <div class="order-actions">${actions.join("")}</div>
+  </details>`;
+}
+
 async function renderOrders() {
   $("panel").innerHTML = `<div class="admin-msg" id="aMsg" role="status"></div>
     <div class="orders-top" id="ordersTop"><p class="hint">Loading…</p></div>
+    <div class="orders-filter" id="ordersFilter" role="group" aria-label="Show orders"></div>
     <div id="ordersList"></div>`;
   let data;
   try { data = await api("/orders"); } catch (e) { say(e.message, "error"); return; }
-  const when = iso => new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  const orders = data.orders, open = new Set();
+  let filter = orders.some(ORDER_FILTERS[0][2]) ? "open" : "all";
+
   $("ordersTop").innerHTML = `<div class="orders-status">
       <span class="pill ${data.ordersOpen ? "pill-added" : ""}">Online ordering: ${data.ordersOpen ? "ON" : "OFF"}</span>
       <span class="pill ${data.discord ? "pill-added" : ""}">Discord: ${data.discord ? "connected" : "not connected"}</span>
       <button type="button" class="btn btn-small" id="dcTest"${data.discord ? "" : " disabled"}>Send a test message to Discord</button>
+      <button type="button" class="btn btn-small" id="csvBtn"${orders.length ? "" : " disabled"}>Download as spreadsheet (CSV)</button>
     </div>
-    <p class="hint">Every order is saved here for 90 days and posted to the Discord channel. ${data.ordersOpen ? "" : "Customers can't order online yet, so this list stays empty until ordering is switched on."}</p>`;
+    <p class="hint">Every order is saved here for 90 days and posted to the Discord channel. Stock isn't reduced by orders, so adjust it under Stock as comics sell. ${data.ordersOpen ? "" : "Customers can't order online yet, so this list stays empty until ordering is switched on."}</p>`;
   $("dcTest").addEventListener("click", async () => {
     $("dcTest").disabled = true;
     try { await api("/orders/test", { method: "POST" }); say("Sent. Check the Discord channel for a message marked TEST.", "ok"); }
     catch (e) { say(e.message, "error"); }
     $("dcTest").disabled = false;
   });
-  $("ordersList").innerHTML = data.orders.length ? data.orders.map(o => `<details class="order">
-      <summary><b>${esc(o.id)}</b> <span>${esc(when(o.placedAt))}</span> <span>${esc(o.name)}</span> <span class="pill">${o.method === "post" ? "Post" : "Collect"}</span> <b class="order-total">${money(o.total)}</b>${/^failed/.test(o.discord || "") ? ' <span class="pill pill-edit">Not posted to Discord</span>' : ""}</summary>
-      <dl class="done-dl">
-        <dt>Phone</dt><dd>${esc(o.phone)}</dd>
-        ${o.method === "collect" ? `<dt>Collect on</dt><dd>${esc(o.collectDate)}</dd>` : `<dt>Post to</dt><dd>${escLines(o.address)}</dd>`}
-        <dt>Items</dt><dd>${o.items.map(i => `${i.qty} × ${esc(i.title)} · ${money(i.price * i.qty)}`).join("<br>")}</dd>
-        <dt>Total</dt><dd>${money(o.total)}${o.postage ? ` (incl. ${money(o.postage)} postage)` : ""}</dd>
-        <dt>Payment</dt><dd>${o.paid ? "Paid" : "Pending"}</dd>
-        ${o.notes ? `<dt>Notes</dt><dd>${escLines(o.notes)}</dd>` : ""}
-        <dt>Discord</dt><dd>${esc(o.discord || "")}</dd>
-      </dl></details>`).join("") : `<p class="admin-empty">No orders yet.</p>`;
+  $("csvBtn").addEventListener("click", () => download(`flickers-orders-${new Date().toISOString().slice(0, 10)}.csv`, ordersCsv(orders), "text/csv;charset=utf-8"));
+
+  const paint = () => {
+    $("ordersFilter").innerHTML = ORDER_FILTERS.map(([k, name, fn]) => `<button type="button" class="btn btn-small" data-filter="${k}" aria-pressed="${filter === k}">${name} (${orders.filter(fn).length})</button>`).join("");
+    const list = orders.filter(ORDER_FILTERS.find(f => f[0] === filter)[2]);
+    $("ordersList").innerHTML = list.length ? list.map(o => orderHTML(o, open.has(o.id))).join("")
+      : `<p class="admin-empty">${orders.length ? "No orders in this view." : "No orders yet."}</p>`;
+  };
+  $("ordersFilter").addEventListener("click", ev => {
+    const b = ev.target.closest("[data-filter]"); if (!b) return;
+    filter = b.dataset.filter; paint();
+    $("ordersFilter").querySelector(`[data-filter="${filter}"]`).focus();
+  });
+  $("ordersList").addEventListener("toggle", ev => { const id = ev.target.dataset && ev.target.dataset.order; if (id) (ev.target.open ? open.add(id) : open.delete(id)); }, true);
+  $("ordersList").addEventListener("click", ev => {
+    const b = ev.target.closest("[data-oid]"); if (!b) return;
+    const id = b.dataset.oid, o = orders.find(x => x.id === id); if (!o) return;
+    const body = b.dataset.status ? { status: b.dataset.status } : { paid: b.dataset.paid === "yes" };
+    const go = async () => {
+      b.disabled = true;
+      try {
+        const r = await api(`/orders/${encodeURIComponent(id)}`, { method: "POST", body });
+        Object.assign(o, r.order);
+        say(`${id}: ${body.status ? STATUS_NAME(o) : o.paid ? "marked paid" : "marked unpaid"}.`, "ok");
+        paint();
+        const summary = $("ordersList").querySelector(`[data-order="${id}"] summary`); // keep the keyboard where it was
+        if (summary) summary.focus(); else $("ordersFilter").querySelector(`[data-filter="${filter}"]`).focus();
+      } catch (e) { b.disabled = false; say(e.message, "error"); }
+    };
+    if (body.status === "cancelled") say(`Cancel order ${id} for ${o.name}? It stays in the list as cancelled.`, "error", [{ label: "Cancel order", danger: true, fn: go }, { label: "Keep order", fn: () => say("") }]);
+    else go();
+  });
+  paint();
 }
 
 /* ---------- staff tab (owner) ---------- */

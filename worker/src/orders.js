@@ -187,6 +187,46 @@ export async function listOrders(env) {
   return out.slice(0, 100);
 }
 
+/* ---------- working through an order ----------
+   new → ready → done (collected or posted), or cancelled at any point; "paid" is tracked separately because
+   until Fleeca is connected the shop and customer settle payment themselves. Every change is kept in the
+   order's history so staff can see who did what. */
+export const STATUSES = ["new", "ready", "done", "cancelled"];
+
+async function findOrderKey(env, id) {
+  let cursor;
+  do {
+    const page = await env.USERS.list({ prefix: "order:", cursor });
+    const hit = page.keys.find(k => k.name.endsWith(":" + id));
+    if (hit) return hit.name;
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return null;
+}
+
+export async function updateOrder(env, id, patch, user) {
+  if (!/^FC-[A-Z2-9]{6}$/.test(String(id))) throw bad(400, "That isn't an order number.");
+  if (!patch || typeof patch !== "object") throw bad(400, "Nothing to change.");
+  const key = await findOrderKey(env, id), raw = key && await env.USERS.get(key);
+  if (!raw) throw bad(404, "That order wasn't found. Orders are kept for 90 days.");
+  const o = JSON.parse(raw), changes = [];
+
+  if (patch.status !== undefined) {
+    if (!STATUSES.includes(patch.status)) throw bad(400, "That isn't a valid status.");
+    if (patch.status !== (o.status || "new")) { o.status = patch.status; changes.push(patch.status); }
+  }
+  if (patch.paid !== undefined) {
+    if (typeof patch.paid !== "boolean") throw bad(400, "Paid must be yes or no.");
+    if (patch.paid !== !!o.paid) { o.paid = patch.paid; changes.push(patch.paid ? "paid" : "unpaid"); }
+  }
+  if (!changes.length) return { order: o };
+
+  o.history = [...(o.history || []), ...changes.map(change => ({ at: new Date().toISOString(), by: user.username, change }))].slice(-30);
+  const left = Math.max(60, ORDER_TTL - Math.floor((Date.now() - Date.parse(o.placedAt)) / 1000)); // keep the original 90-day clock
+  await env.USERS.put(key, JSON.stringify(o), { expirationTtl: left });
+  return { order: o };
+}
+
 /* A sample message so staff can check the channel is connected. Not stored, not a real order. */
 export async function sendTestMessage(env, user) {
   if (!env.DISCORD_WEBHOOK_URL) throw bad(400, "Discord isn't connected yet. Add the webhook as described in docs/DISCORD.md.");

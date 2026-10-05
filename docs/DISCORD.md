@@ -67,6 +67,8 @@ the payment link built into the Worker).
 ## Good to know
 
 - **Stock isn't reduced automatically.** Orders are logged for you to fulfil. Adjust stock in the staff area as comics sell.
+- **Working through orders:** in the staff area's **Orders** tab, mark an order ready, collected or posted, paid, or cancelled.
+  These changes are kept in the order's history (who and when) but aren't posted to Discord; the channel stays a plain log of new orders.
 - **Customer details are stored** (name, phone, address) for 90 days for the order log. Delete a Discord message by hand if you want it gone there.
 - **Trying it locally without Discord:** `npm run dev:api` prints each order's Discord message in the terminal instead of sending it.
   Build the site with `ORDERS_LIVE=1 ORDER_API=http://localhost:8787/orders ADMIN_API=http://localhost:8787 npm run build`, then `npm run serve`.

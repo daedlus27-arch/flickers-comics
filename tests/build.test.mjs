@@ -65,6 +65,28 @@ test("no secrets or tokens end up in the published site", () => {
   for (const f of files) assert.ok(!/ghp_[A-Za-z0-9]{20,}|github_pat_|SESSION_SECRET|SETUP_KEY/.test(fs.readFileSync(f, "utf8")), `secret-looking text in ${f}`);
 });
 
+test("every page is valid HTML", async () => {
+  const { HtmlValidate } = await import("html-validate");
+  const config = JSON.parse(fs.readFileSync(path.join(ROOT, ".htmlvalidate.json"), "utf8"));
+  const validator = new HtmlValidate(config);
+  const problems = [];
+  for (const file of htmlFiles(DIST)) {
+    const report = await validator.validateString(fs.readFileSync(file, "utf8"), path.relative(DIST, file));
+    for (const r of report.results) for (const m of r.messages) problems.push(`${r.filePath}:${m.line}:${m.column} ${m.ruleId} ${m.message}`);
+  }
+  assert.deepEqual(problems.slice(0, 10), [], `${problems.length} HTML problem(s)`);
+});
+
+test("pages ask for no external resources the security policy would block", () => {
+  for (const file of [path.join(DIST, "index.html"), path.join(DIST, "admin/index.html")]) {
+    const html = fs.readFileSync(file, "utf8");
+    const csp = ((html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/) || [])[1] || "").replaceAll("&#39;", "'");
+    assert.match(csp, /script-src 'self'/, file);
+    assert.ok(!/unsafe-inline/.test(csp.match(/script-src[^;]*/)[0]), "no inline scripts allowed");
+    assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>(?!\s*<\/script>)/.test(html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, "")), `inline script in ${file}`);
+  }
+});
+
 test("placeholder covers escape their text", () => {
   assert.ok(!placeholderCover({ id: "x", title: "<img onerror=1>", publisher: "A&B", stock: 1 }).includes("<img"));
 });

@@ -17,7 +17,7 @@
    Orders and Discord (src/orders.js, docs/DISCORD.md): SITE_URL, ORDERS_ENABLED, DISCORD_WEBHOOK_URL, DISCORD_PING_ROLE */
 
 import { HttpError, bad } from "./http.js";
-import { placeOrder, listOrders, sendTestMessage } from "./orders.js";
+import { placeOrder, listOrders, sendTestMessage, updateOrder } from "./orders.js";
 
 const PBKDF2_ITERATIONS = 100000; // Cloudflare Workers allows at most 100,000
 const SESSION_HOURS = 12;
@@ -319,6 +319,8 @@ async function route(request, env) {
 
   if (method === "GET" && path === "/orders") return { orders: await listOrders(env), ordersOpen: String(env.ORDERS_ENABLED) === "true", discord: !!env.DISCORD_WEBHOOK_URL };
   if (method === "POST" && path === "/orders/test") return sendTestMessage(env, user);
+  const om = /^\/orders\/([^/]+)$/.exec(path);
+  if (method === "POST" && om) return updateOrder(env, om[1], await readJson(request), user);
 
   if (path === "/users" && method === "GET") { needOwner(user); return { users: (await listUsers(env)).map(publicUser) }; }
   if (path === "/users" && method === "POST") {

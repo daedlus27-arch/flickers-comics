@@ -163,6 +163,37 @@ test("the test message is labelled TEST, not stored, and needs a webhook", async
   assert.equal((await j(await call(env2, "POST", "/orders/test", null, t2))).status, 400);
 });
 
+test("staff can move an order along, mark it paid, and the change is recorded", async () => {
+  world();
+  const env = baseEnv();
+  const token = await staff(env);
+  const { orderId } = await j(await call(env, "POST", "/orders", order()));
+  assert.equal((await j(await call(env, "POST", `/orders/${orderId}`, { status: "ready" }))).status, 401, "needs a sign-in");
+  const r = await j(await call(env, "POST", `/orders/${orderId}`, { status: "ready", paid: true }, token));
+  assert.equal(r.status, 200);
+  assert.equal(r.order.status, "ready");
+  assert.equal(r.order.paid, true);
+  assert.deepEqual(r.order.history.map(h => [h.by, h.change]), [["owner", "ready"], ["owner", "paid"]]);
+  const again = await j(await call(env, "POST", `/orders/${orderId}`, { status: "ready" }, token));
+  assert.equal(again.order.history.length, 2, "repeating the same status adds nothing");
+  await call(env, "POST", `/orders/${orderId}`, { status: "done" }, token);
+  const list = await j(await call(env, "GET", "/orders", null, token));
+  assert.equal(list.orders[0].status, "done");
+  assert.equal(list.orders[0].discord, "sent", "other details are untouched");
+  assert.equal(list.orders[0].items[0].qty, 2);
+});
+test("order updates reject nonsense and unknown orders", async () => {
+  world();
+  const env = baseEnv();
+  const token = await staff(env);
+  const { orderId } = await j(await call(env, "POST", "/orders", order()));
+  assert.equal((await j(await call(env, "POST", `/orders/${orderId}`, { status: "shipped-to-mars" }, token))).status, 400);
+  assert.equal((await j(await call(env, "POST", `/orders/${orderId}`, { paid: "yes" }, token))).status, 400);
+  assert.equal((await j(await call(env, "POST", "/orders/FC-AAAAAA", { status: "done" }, token))).status, 404);
+  assert.equal((await j(await call(env, "POST", "/orders/not-an-order", { status: "done" }, token))).status, 400);
+  assert.equal((await j(await call(env, "POST", `/orders/${orderId}`, { total: 0, items: [] }, token))).order.total, 800, "prices and items can't be edited here");
+});
+
 test("long item lists fit inside Discord's limits", () => {
   const items = Array.from({ length: 40 }, (_, i) => ({ id: "x" + i, title: "A fairly long comic title number " + i, qty: 1, price: 400 }));
   const e = orderEmbed({ id: "FC-AAAAAA", placedAt: new Date().toISOString(), name: "N", phone: "1", method: "collect", collectDate: today(), items, subtotal: 16000, postage: 0, total: 16000, notes: "x".repeat(2000) }, SHOP.config);

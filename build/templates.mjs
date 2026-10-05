@@ -31,6 +31,7 @@ ${ogImage ? `<meta property="og:image" content="${esc(ogImage)}">\n<meta name="t
 <link rel="apple-touch-icon" href="${root}assets/apple-touch-icon.png">
 ${fontPreload.map(f => `<link rel="preload" href="${root}${f}" as="font" type="font/woff2" crossorigin>`).join("\n")}
 ${fontCss ? `<style>${fontCss.split("__ROOT__").join(root)}</style>` : ""}
+${script === "js/site.js" ? `<noscript><style>.add,.cart-btn,.qv-buy,.tools,.dividers{display:none!important}</style></noscript>` : ""}
 ${css.map(c => `<link rel="stylesheet" href="${root}${c}">`).join("\n")}
 ${script === "js/site.js" ? `<link rel="preload" href="${root}data/shop.json?v=${BUILD_ID}" as="fetch" crossorigin>` : ""}
 ${extraHead}
@@ -125,12 +126,12 @@ export function dialogs(cfg) {
             <div class="two">
               <div class="field">
                 <label for="f-name">Full name</label>
-                <input id="f-name" name="name" autocomplete="name" placeholder="e.g. Jamie Reyes" aria-describedby="e-name">
+                <input type="text" id="f-name" name="name" autocomplete="name" placeholder="e.g. Jamie Reyes" aria-describedby="e-name">
                 <p class="error" id="e-name" hidden></p>
               </div>
               <div class="field">
                 <label for="f-phone">Phone number</label>
-                <input id="f-phone" name="phone" inputmode="tel" autocomplete="tel" placeholder="e.g. 5550142" aria-describedby="h-phone e-phone">
+                <input type="text" id="f-phone" name="phone" inputmode="tel" autocomplete="tel" placeholder="e.g. 5550142" aria-describedby="h-phone e-phone">
                 <p class="hint" id="h-phone">So we can text you about your order.</p>
                 <p class="error" id="e-phone" hidden></p>
               </div>
@@ -182,7 +183,7 @@ export function dialogs(cfg) {
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>`;
 }
 
-const NOSCRIPT = `<noscript><style>.add,.cart-btn,.qv-buy,.tools,.dividers{display:none!important}</style></noscript>`;
+
 
 /* ---------- product pieces ---------- */
 export function stickerHTML(p) {
@@ -257,8 +258,7 @@ export function homePage(ctx) {
     ? `<button type="button" class="divider" data-group="all" aria-pressed="true">Everything<span class="n">${total}</span></button>` + groups.map(g => `<button type="button" class="divider" data-group="${esc(g.key)}" aria-pressed="false">${esc(g.label)}<span class="n">${g.count}</span></button>`).join("")
     : "";
   const cards = products.map((p, i) => cardHTML(p, ctx, i)).join("\n");
-  return `${NOSCRIPT}
-<a class="skip" href="#shop">Skip to the shelves</a>
+  return `<a class="skip" href="#shop">Skip to the shelves</a>
 ${topStrip(cfg)}
 ${header(root)}
 <main id="top">
@@ -360,8 +360,7 @@ function hoursSection(cfg) {
 export function comicPage(p, ctx, related) {
   const { cfg, cats, root } = ctx;
   const t = fullTitle(p);
-  return `${NOSCRIPT}
-<a class="skip" href="#item">Skip to the comic</a>
+  return `<a class="skip" href="#item">Skip to the comic</a>
 ${topStrip(cfg)}
 ${header(root)}
 <main id="item" class="item-page">
@@ -380,8 +379,7 @@ ${dialogs(cfg)}`;
 
 export function notFoundPage(ctx) {
   const { cfg, root } = ctx;
-  return `${NOSCRIPT}
-${topStrip(cfg)}
+  return `${topStrip(cfg)}
 ${header(root)}
 <main>
   <div class="wrap lost">
