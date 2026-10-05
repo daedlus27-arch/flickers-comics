@@ -18,7 +18,12 @@ It's a static site hosted free on GitHub Pages. Every comic has its own page, an
 ## Changing stock
 
 **In the staff area** (`/admin/`): sign in with your username and password, change prices and stock,
-add or edit comics, upload cover photos, then **Publish changes**. The site updates in a minute or two.
+add or edit comics, then **Publish changes**. The site updates in a minute or two.
+
+**Covers:** no need to save a picture to your computer first. In a comic's editor, drag a picture onto the cover, or copy one
+(right-click it in the browser, **Copy image**) and press <kbd>Ctrl</kbd> + <kbd>V</kbd> (or click **Paste image**). You can also drop a picture
+straight onto a comic's row in the stock list to replace its cover. Pictures are resized to 600px wide in your browser before they're saved,
+and a cover nothing uses any more is removed when you publish.
 
 To change many comics at once, tick them (or tick **Select all**, which respects your search; hold Shift to
 select a range), then use the yellow bar to set a price, raise or lower prices by a percentage or an amount,

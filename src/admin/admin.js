@@ -212,6 +212,7 @@ function renderShell() {
     renderShell();
   }));
   $("editDlg").addEventListener("click", ev => { if (ev.target === $("editDlg")) $("editDlg").close(); });
+  initCoverDrops();
   if (S.tab === "stock") renderStock();
   else if (S.tab === "orders") renderOrders();
   else if (S.tab === "wanted") renderWanted();
@@ -304,6 +305,7 @@ function renderStock() {
   $("aRefresh").addEventListener("click", async () => {
     try { await loadStock(); renderList(); say("Stock refreshed. Orders take comics off the shelf automatically.", "ok"); } catch (e) { say(e.message, "error"); }
   });
+  initRowDrops($("aList"));
   renderList();
 }
 function updateCounts() {
@@ -479,10 +481,14 @@ function editorHTML() {
     <div class="co-head"><h2 class="dialog-title" id="edTitle">Edit item</h2><button type="button" class="icon-btn on-dark" data-close aria-label="Close without saving">${X}</button></div>
     <div class="ed-grid">
       <div class="ed-cover">
-        <div class="ed-preview" id="edPreview"></div>
-        <label class="btn btn-small file-btn">Upload cover photo<input type="file" accept="image/*" id="edFile" class="sr-only"></label>
+        <div class="ed-drop" id="edDrop"><div class="ed-preview" id="edPreview"></div><p class="ed-drop-tip" aria-hidden="true">Drop an image here</p></div>
+        <div class="ed-cover-btns">
+          <label class="btn btn-small file-btn">Choose a file<input type="file" accept="image/*" id="edFile" class="sr-only"></label>
+          <button type="button" class="btn btn-small" id="edPaste">Paste image</button>
+        </div>
         <button type="button" class="link-btn" id="edRemoveImg" hidden>Remove the photo</button>
-        <p class="hint">Photos are resized to 600px wide before they're saved. Without a photo, the shop shows a plain cover with the title.</p>
+        <p class="ed-cover-msg" id="edCoverMsg" role="status"></p>
+        <p class="hint">Drag a picture onto the cover, or copy one (right-click, Copy image) and press <kbd>Ctrl</kbd> + <kbd>V</kbd>. Photos are resized to 600px wide before they're saved. Without a photo, the shop shows a plain cover with the title.</p>
       </div>
       <div class="ed-fields">
         <div class="two">
@@ -567,25 +573,92 @@ function openEditor(id) {
   fieldVisibility();
   updatePreview();
 
-  dlg.addEventListener("click", ev => { if (ev.target.closest("[data-close]")) dlg.close(); });
-  dlg.addEventListener("input", ev => { if (ev.target.id !== "edFile") updatePreview(); });
   F("cat").addEventListener("change", () => { fieldVisibility(); updatePreview(); });
-  $("edRemoveImg").addEventListener("click", () => { ED.image = ""; ED.newUpload = null; $("edFile").value = ""; updatePreview(); });
-  $("edFile").addEventListener("change", async () => {
-    const file = $("edFile").files[0]; if (!file) return;
-    $("edError").textContent = "";
-    try {
-      const dataUrl = await shrinkImage(file);
-      const path = `assets/covers/${slug(F("title").value || "cover")}-${Date.now().toString(36)}.jpg`;
-      ED.image = path; ED.newUpload = { path, b64: dataUrl.split(",")[1], url: dataUrl };
-      S.previews[path] = dataUrl;
-      updatePreview();
-    } catch (e) { $("edError").textContent = e.message; }
-  });
+  $("edRemoveImg").addEventListener("click", () => { ED.image = ""; ED.newUpload = null; $("edFile").value = ""; coverNote(""); updatePreview(); });
+  $("edFile").addEventListener("change", () => { const f = $("edFile").files[0]; if (f) setEditorCover(f); });
+  $("edPaste").addEventListener("click", pasteFromClipboard);
   $("edForm").addEventListener("submit", saveItem);
   dlg.showModal();
   F("title").focus();
 }
+
+/* ---------- cover images: drag and drop, paste, or choose a file ---------- */
+const hasFiles = dt => !!dt && [...(dt.types || [])].includes("Files");
+const looksDraggable = ev => hasFiles(ev.dataTransfer) || (!ev.target.closest("input,textarea") && [...(ev.dataTransfer?.types || [])].includes("text/uri-list"));
+const imageIn = dt => {
+  if (!dt) return null;
+  const f = [...(dt.files || [])].find(x => /^image\//.test(x.type));
+  if (f) return f;
+  const it = [...(dt.items || [])].find(x => x.kind === "file" && /^image\//.test(x.type));
+  return it ? it.getAsFile() : null;
+};
+const FROM_SITE = "That picture came from another website, which the browser won't pass on. Right-click it, choose Copy image, then press Ctrl+V here.";
+let coverSeq = 0;
+async function makeCover(file, title) {
+  const url = await shrinkImage(file);
+  return { path: `assets/covers/${slug(title || "cover")}-${Date.now().toString(36)}${(++coverSeq).toString(36)}.jpg`, b64: url.split(",")[1], url };
+}
+function coverNote(text, bad) { const el = $("edCoverMsg"); if (el) { el.textContent = text; el.classList.toggle("is-bad", !!bad); } }
+async function setEditorCover(file) {
+  $("edError").textContent = ""; coverNote("Resizing…");
+  try {
+    const c = await makeCover(file, F("title").value);
+    ED.image = c.path; ED.newUpload = c; S.previews[c.path] = c.url;
+    updatePreview(); coverNote("Cover added. Save the item to keep it.");
+  } catch (e) { coverNote(e.message, true); }
+}
+async function setRowCover(id, file) {
+  const p = S.draft.find(x => x.id === id); if (!p) return;
+  try {
+    const c = await makeCover(file, p.title);
+    S.uploads[c.path] = c.b64; S.previews[c.path] = c.url; p.image = c.path;
+    updateCounts(); refreshRow(id);
+    say(`New cover for ${label(p)}. Click “Publish changes” when you're ready for customers to see it.`, "ok");
+  } catch (e) { say(e.message, "error"); }
+}
+async function pasteFromClipboard() {
+  try {
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find(t => /^image\//.test(t));
+      if (type) { await setEditorCover(new File([await item.getType(type)], "pasted", { type })); return; }
+    }
+    coverNote("There's no image on the clipboard. Right-click a picture and choose Copy image first.", true);
+  } catch (e) { coverNote("Your browser needs you to press Ctrl+V instead.", true); }
+}
+function initCoverDrops() {
+  const over = (el, on) => el && el.classList.toggle("is-over", on);
+  const edit = $("editDlg");
+  edit.addEventListener("dragover", ev => { if (!looksDraggable(ev)) return; ev.preventDefault(); over($("edDrop"), true); });
+  edit.addEventListener("dragleave", ev => { if (!edit.contains(ev.relatedTarget)) over($("edDrop"), false); });
+  edit.addEventListener("drop", ev => {
+    if (!looksDraggable(ev)) return;
+    ev.preventDefault(); over($("edDrop"), false);
+    const f = imageIn(ev.dataTransfer);
+    if (f) setEditorCover(f); else coverNote(hasFiles(ev.dataTransfer) ? "That file isn't an image. Use a JPG, PNG or WebP." : FROM_SITE, true);
+  });
+  edit.addEventListener("click", ev => { if (ev.target.closest("[data-close]")) edit.close(); });
+  edit.addEventListener("input", ev => { if (ev.target.id !== "edFile") updatePreview(); });
+}
+function initRowDrops(list) {
+  const over = (el, on) => el.classList.toggle("is-over", on);
+  const rowOf = ev => ev.target.closest(".arow");
+  list.addEventListener("dragover", ev => { const r = rowOf(ev); if (!r || !looksDraggable(ev)) return; ev.preventDefault(); over(r, true); });
+  list.addEventListener("dragleave", ev => { const r = rowOf(ev); if (r && !r.contains(ev.relatedTarget)) over(r, false); });
+  list.addEventListener("drop", ev => {
+    const r = rowOf(ev); if (!r) return;
+    ev.preventDefault(); over(r, false);
+    const f = imageIn(ev.dataTransfer);
+    if (f) setRowCover(r.dataset.row, f); else say(hasFiles(ev.dataTransfer) ? "That file isn't an image. Use a JPG, PNG or WebP." : FROM_SITE, "error");
+  });
+}
+/* Ctrl+V with an image on the clipboard, while the editor is open, sets the cover; pasting text still works normally. */
+document.addEventListener("paste", ev => {
+  const dlg = $("editDlg"); if (!dlg || !dlg.open) return;
+  const f = imageIn(ev.clipboardData);
+  if (f) { ev.preventDefault(); setEditorCover(f); }
+});
+/* A file dropped anywhere else shouldn't make the browser open it and leave the staff area. */
+["dragover", "drop"].forEach(t => window.addEventListener(t, ev => { if (hasFiles(ev.dataTransfer)) ev.preventDefault(); }));
 function resetDelete() {
   const wrap = $("edDeleteWrap"); if (!wrap) return;
   wrap.innerHTML = `<button type="button" class="link-btn danger-link" id="edDelete">Delete item</button>`;
