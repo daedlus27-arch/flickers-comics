@@ -61,6 +61,10 @@ Every order is re-priced from the real catalog by the staff service, saved (staf
 Discord channel. Payment isn't online yet: orders are "payment pending" and the shop settles up with
 the customer. Fleeca payment is a later step (`payOnline`). See `docs/DISCORD.md` to reconnect Discord or switch ordering off.
 
+**Shareable carts:** the cart has a "Copy a link to this cart" button. Opening such a link (`/?cart=batman-14:2,flash-3:1`, comic id
+and quantity) adds those comics to the visitor's own cart, skipping anything sold out. Handy for setting a stack aside for a customer
+over the phone: build the cart, copy the link, send it.
+
 Customers can share a shelf with a link: `/?shelf=DC+Comics&sort=price-asc`. Pressing <kbd>/</kbd> jumps to the search box.
 
 ## Working on the site

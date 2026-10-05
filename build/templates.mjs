@@ -108,6 +108,7 @@ export function dialogs(cfg) {
   <div class="drawer-foot" id="drawerFoot">
     <div class="r-line"><span>Subtotal</span><strong id="drawerSub">$0</strong></div>
     <p class="hint">Choose collection or postage at checkout.</p>
+    <p class="share-cart"><button type="button" class="link-btn" data-share-cart>Copy a link to this cart</button> <span class="hint">Send it to a friend and they get the same comics in their cart.</span></p>
     <button type="button" class="btn btn-yellow btn-block" id="checkoutBtn">Checkout</button>
   </div>
 </dialog>

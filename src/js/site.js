@@ -480,6 +480,34 @@ function handlePaymentReturn() {
   }
 }
 
+/* ===================== sharing a cart ===================== */
+// A cart link looks like  /?cart=batman-14:2,flash-3:1  (comic id : quantity). Opening one adds those comics to the visitor's own cart.
+const cartLink = () => new URL(`${root}?cart=${Object.entries(cart).map(([id, n]) => `${id}:${n}`).join(",")}`, location.href).href;
+function copyText(text, ok, fail) {
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast(ok), () => toast(fail));
+  else toast(fail);
+}
+function loadSharedCart() {
+  let params;
+  try { params = new URLSearchParams(location.search); } catch (e) { return; }
+  const raw = params.get("cart");
+  if (raw === null) return;
+  params.delete("cart");
+  const qs = params.toString();
+  try { history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash); } catch (e) { /* ignore */ }
+  let added = 0, skipped = 0;
+  for (const part of raw.slice(0, 3000).split(",").slice(0, 40)) {
+    const [id, q] = part.split(":"), n = Math.min(99, Math.floor(Number(q === undefined ? 1 : q)));
+    const p = Object.hasOwn(byId, id) ? byId[id] : null;
+    if (!p || !(p.stock > 0) || !(n > 0)) { skipped++; continue; }
+    const before = cartQty(id), next = Math.min(p.stock, before + n);
+    if (next > before) { cart[id] = next; added += next - before; } else skipped++;
+  }
+  if (added) { saveCart(); renderCartUI(); bumpCart(); }
+  if (added) toast(`Added ${added} comic${added === 1 ? "" : "s"} from a shared cart${skipped ? ` (${skipped} unavailable)` : ""}`, { label: "View cart", fn: openDrawer });
+  else toast("The comics in that cart link are sold out or no longer in the shop.");
+}
+
 /* ===================== tracking an order ===================== */
 const tr = $("track"), trForm = $("trackForm"), trResult = $("trackResult");
 let lastOrder = null; // the order just placed in this visit, so its tracking page can open without retyping
@@ -581,18 +609,14 @@ function buyAction(action, st, rerender, inDialog) {
 }
 
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-open],[data-add],.divider[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close],[data-copy],[data-track],[data-track-this],[data-track-again]");
+  const t = ev.target.closest("[data-share-cart],[data-open],[data-add],.divider[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close],[data-copy],[data-track],[data-track-this],[data-track-again]");
   if (!t) return;
   const d = t.dataset;
   if ("track" in d) { openTrack(); return; }
   if ("trackThis" in d) { openTrack(lastOrder, true); return; }
   if ("trackAgain" in d) { trForm.hidden = false; trResult.hidden = true; trResult.innerHTML = ""; $("t-id").value = ""; $("t-phone").value = ""; $("t-id").focus(); return; }
-  if (d.copy) {
-    const done = () => toast("Order number copied.");
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(d.copy).then(done, () => toast("Couldn't copy. Select the number and copy it by hand."));
-    else toast("Couldn't copy. Select the number and copy it by hand.");
-    return;
-  }
+  if (d.copy) { copyText(d.copy, "Order number copied.", "Couldn't copy. Select the number and copy it by hand."); return; }
+  if ("shareCart" in d) { copyText(cartLink(), "Cart link copied. Anyone who opens it gets these comics in their cart.", "Couldn't copy the link."); return; }
   if (d.open) {
     if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || ev.button) return; // let the link open normally
     ev.preventDefault(); openQuickView(d.open); return;
@@ -651,6 +675,7 @@ try {
   applyFilters();
   handlePaymentReturn();
   enableTracking();
+  loadSharedCart();
 } catch (e) {
   // The pre-rendered pages still read fine without it; only the cart is unavailable.
   const btn = $("cartBtn");
