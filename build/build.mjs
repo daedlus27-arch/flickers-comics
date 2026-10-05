@@ -83,10 +83,10 @@ for (const name of ["styles", "admin"]) {
   const out = await esbuild.transform(fs.readFileSync(path.join(ROOT, `src/css/${name}.css`), "utf8"), { loader: "css", minify: true });
   wr(`css/${name}.css`, out.code);
 }
-await esbuild.build({
-  entryPoints: { "js/site": path.join(ROOT, "src/js/site.js"), "admin/admin": path.join(ROOT, "src/admin/admin.js") },
-  outdir: DIST, bundle: true, minify: true, format: "esm", target: "es2022", legalComments: "none", logLevel: "warning"
-});
+const JS = { bundle: true, minify: true, format: "esm", target: "es2022", legalComments: "none", logLevel: "warning", outdir: DIST };
+await esbuild.build({ ...JS, entryPoints: { "js/site": path.join(ROOT, "src/js/site.js") } });
+// the staff area splits into chunks that load as each tab is first opened; the shop stays one file
+await esbuild.build({ ...JS, entryPoints: { "admin/admin": path.join(ROOT, "src/admin/admin.js") }, splitting: true, chunkNames: "admin/[name]-[hash]" });
 for (const f of ["flickers-logo.png", "favicon.png", "apple-touch-icon.png"]) cp(`assets/${f}`, `assets/${f}`);
 wr(".nojekyll", "");
 

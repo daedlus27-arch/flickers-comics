@@ -5,10 +5,6 @@
 import { esc } from "../shared.mjs";
 import { app, API, $, S, hooks, sessionStore, api, say } from "./core.js";
 import { changeList, loadStock, renderStock, initCoverDrops } from "./stock.js";
-import { renderOrders } from "./orders.js";
-import { renderWanted } from "./wanted.js";
-import { renderSales } from "./sales.js";
-import { renderStaff, renderAccount } from "./staff.js";
 
 function showLogin(message = "") {
   app.innerHTML = `<div class="adm-wrap"><form class="adm-card" id="loginForm" novalidate>
@@ -57,6 +53,23 @@ async function startApp() {
   renderShell();
 }
 
+/* Every tab except Stock is fetched the first time it's opened, so signing in loads only what the first screen needs. */
+const LAZY = {
+  orders: () => import("./orders.js").then(m => m.renderOrders),
+  wanted: () => import("./wanted.js").then(m => m.renderWanted),
+  sales: () => import("./sales.js").then(m => m.renderSales),
+  staff: () => import("./staff.js").then(m => m.renderStaff),
+  account: () => import("./staff.js").then(m => m.renderAccount)
+};
+async function openLazyTab(key) {
+  $("panel").innerHTML = `<p class="hint">Loading…</p>`;
+  try {
+    const render = await LAZY[key]();
+    if (S.tab === key) render(); // unless they've moved on while it loaded
+  } catch (e) {
+    $("panel").innerHTML = `<div class="admin-msg error" role="alert"><span>Couldn't load this tab. Check your connection and try again. If the shop was updated a moment ago, reload the page (you stay signed in; publish any stock changes first).</span></div>`;
+  }
+}
 const OWNER_ONLY = ["sales", "staff"];
 const TABS = [["stock", "Stock"], ["orders", "Orders"], ["wanted", "Wanted"], ["sales", "Sales"], ["staff", "Staff"], ["account", "My password"]];
 async function showTab(key) {
@@ -91,12 +104,8 @@ function renderShell() {
   });
   $("editDlg").addEventListener("click", ev => { if (ev.target === $("editDlg")) $("editDlg").close(); });
   initCoverDrops();
-  if (S.tab === "stock") renderStock();
-  else if (S.tab === "orders") renderOrders();
-  else if (S.tab === "wanted") renderWanted();
-  else if (S.tab === "sales" && owner) renderSales();
-  else if (S.tab === "staff" && owner) renderStaff();
-  else { S.tab = "account"; renderAccount(); }
+  if (S.tab !== "stock" && (!LAZY[S.tab] || (OWNER_ONLY.includes(S.tab) && !owner))) S.tab = "account";
+  if (S.tab === "stock") renderStock(); else openLazyTab(S.tab);
 }
 function askSignOut() {
   if (changeList().count > 0 && S.tab === "stock") {
