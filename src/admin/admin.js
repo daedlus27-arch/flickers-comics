@@ -187,6 +187,12 @@ async function loadStock() {
   S.selected = new Set();
 }
 
+const TABS = [["stock", "Stock"], ["orders", "Orders"], ["wanted", "Wanted"], ["staff", "Staff"], ["account", "My password"]];
+async function showTab(key) {
+  S.tab = key;
+  if (S.tab === "stock" && S.draft.length && changeList().count === 0) { try { await loadStock(); } catch (e) { /* show what we already have */ } } // pick up stock that orders have used
+  renderShell();
+}
 function renderShell() {
   const owner = S.user.role === "owner";
   app.innerHTML = `<div class="adm-wrap">
@@ -195,22 +201,23 @@ function renderShell() {
       <div class="adm-who"><span>Signed in as <b>${esc(S.user.username)}</b>${owner ? " (owner)" : ""}</span><button type="button" class="link-btn" id="signOut">Sign out</button></div>
     </div>
     <div class="adm-tabs" role="tablist" aria-label="Staff area">
-      <button type="button" class="adm-tab" role="tab" data-tab="stock" aria-selected="${S.tab === "stock"}">Stock</button>
-      <button type="button" class="adm-tab" role="tab" data-tab="orders" aria-selected="${S.tab === "orders"}">Orders</button>
-      <button type="button" class="adm-tab" role="tab" data-tab="wanted" aria-selected="${S.tab === "wanted"}">Wanted</button>
-      ${owner ? `<button type="button" class="adm-tab" role="tab" data-tab="staff" aria-selected="${S.tab === "staff"}">Staff</button>` : ""}
-      <button type="button" class="adm-tab" role="tab" data-tab="account" aria-selected="${S.tab === "account"}">My password</button>
+      ${TABS.filter(([key]) => key !== "staff" || owner).map(([key, name]) => `<button type="button" class="adm-tab" role="tab" id="tab-${key}" data-tab="${key}" aria-selected="${S.tab === key}" aria-controls="panel" tabindex="${S.tab === key ? 0 : -1}">${name}</button>`).join("")}
     </div>
-    <div class="adm-panel" id="panel" role="tabpanel"></div>
+    <div class="adm-panel" id="panel" role="tabpanel" aria-labelledby="tab-${S.tab}"></div>
   </div>
   <dialog class="editor" id="editDlg" aria-labelledby="edTitle"></dialog>
   <dialog class="prompt" id="bulkDlg" aria-labelledby="bulkTitle"></dialog>`;
   $("signOut").addEventListener("click", askSignOut);
-  app.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", async () => {
-    S.tab = b.dataset.tab;
-    if (S.tab === "stock" && S.draft.length && changeList().count === 0) { try { await loadStock(); } catch (e) { /* show what we already have */ } } // pick up stock that orders have used
-    renderShell();
-  }));
+  const tabs = [...app.querySelectorAll("[data-tab]")];
+  tabs.forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+  $("panel").previousElementSibling.addEventListener("keydown", async ev => { // arrow keys move between tabs, as screen reader users expect from a tab list
+    const at = tabs.indexOf(document.activeElement), step = { ArrowRight: 1, ArrowLeft: -1 }[ev.key];
+    const to = ev.key === "Home" ? 0 : ev.key === "End" ? tabs.length - 1 : step && at >= 0 ? (at + step + tabs.length) % tabs.length : -1;
+    if (to < 0) return;
+    ev.preventDefault();
+    await showTab(tabs[to].dataset.tab);
+    $("tab-" + tabs[to].dataset.tab).focus();
+  });
   $("editDlg").addEventListener("click", ev => { if (ev.target === $("editDlg")) $("editDlg").close(); });
   initCoverDrops();
   if (S.tab === "stock") renderStock();

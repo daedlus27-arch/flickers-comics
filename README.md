@@ -10,7 +10,8 @@ It's a static site hosted free on GitHub Pages. Every comic has its own page, an
 | `data/` | The shop's content: `products.json` (stock), `featured.json` ("new this week"), `config.json` (postage, hours, categories, addresses). |
 | `build/` | A small script that turns `data/` and `assets/` into the finished site in `dist/`: one page per comic, resized WebP covers, minified CSS and JavaScript, self-hosted fonts, sitemap. |
 | `src/` | The site's CSS and JavaScript (`js/site.js` is the storefront, `admin/admin.js` the staff area, `shared.mjs` is used by both and by the build). |
-| `tests/` | Automated checks: the build, valid HTML, the staff service, and the order pipeline. The deploy stops if any fail. |
+| `tests/` | Automated checks: the build, valid HTML, the staff service, the order pipeline and the wanted list. The deploy stops if any fail. |
+| `qa/` | Browser checks (a real Edge or Chrome) for the shop and staff area. Run by hand, not part of the deploy. |
 | `worker/` | The staff service (Cloudflare Worker): logins, publishing, and the order log with Discord. See `docs/SETUP.md` and `docs/DISCORD.md`. |
 | `.github/workflows/deploy.yml` | Tests, builds and publishes the site on every push to `main`. |
 | `assets/` | Logo, icons and the original cover photos (`assets/covers/`). |
@@ -33,7 +34,7 @@ If your session ends while you have unpublished changes, you are asked to sign i
 Above the list you can **Show** only low stock (1 or 2 left), sold-out comics, or comics you've changed but not yet published,
 and **Sort** by title, price or stock. Select all then applies to whatever you're looking at.
 
-**Orders** (staff area → **Orders**): every order is listed with its customer, items and notes. Open an order and mark it
+**Orders** (staff area → **Orders**): every order is listed (newest first, 40 at a time; **Show older orders** loads more) with its customer, items and notes. Open an order and mark it
 **ready**, **collected** (or **posted**), **paid**, or **cancelled**; each change is recorded with who made it and the order's
 Discord post is updated to match. Finished orders move to the **Archive** and are deleted 14 days later.
 **Download as spreadsheet (CSV)** keeps your own records.
@@ -95,9 +96,12 @@ Needs [Node.js](https://nodejs.org) 20 or newer.
 
 ```bash
 npm install
-npm test            # checks the build, the HTML, the staff service and orders
+npm test            # checks the build, the HTML, the staff service and orders (about 10 seconds)
 npm run build       # writes dist/
 npm run serve       # preview at http://localhost:8080
 ```
+
+The first build encodes every cover (a minute or so); later builds reuse the results kept in `.cache/` and take seconds.
+The browser checks in `qa/` (see its README) exercise the shop and staff area in a real browser.
 
 To try the staff area locally without Cloudflare, see the last section of `docs/SETUP.md`.

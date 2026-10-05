@@ -19,7 +19,7 @@ const cp = (from, to) => { const f = path.join(DIST, to); fs.mkdirSync(path.dirn
 
 /* ---------- data ---------- */
 const cfg = JSON.parse(rd("data/config.json"));
-const products = JSON.parse(rd("data/products.json"));
+const products = JSON.parse(process.env.PRODUCTS_FILE ? fs.readFileSync(process.env.PRODUCTS_FILE, "utf8") : rd("data/products.json")); // PRODUCTS_FILE: lets the QA suite build with a different stock list
 const featuredRaw = JSON.parse(rd("data/featured.json"));
 if (process.env.ORDERS_LIVE) cfg.testMode = false; // local testing of the live order path
 if (process.env.ORDER_API) cfg.orderApi = process.env.ORDER_API;

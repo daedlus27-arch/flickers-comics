@@ -27,7 +27,7 @@ const env = { USERS, SESSION_SECRET: "dev-secret-not-for-production", SETUP_KEY:
 kv.set("user:owner", JSON.stringify({ username: "owner", role: "owner", ...(await hashPassword("owner-password-1")), pv: 1, created: new Date().toISOString() }));
 
 /* pretend GitHub */
-let products = fs.readFileSync(path.join(root, "data/products.json"), "utf8");
+let products = fs.readFileSync(process.env.PRODUCTS_FILE || path.join(root, "data/products.json"), "utf8"); // PRODUCTS_FILE: used by the QA suite
 let featured = fs.readFileSync(path.join(root, "data/featured.json"), "utf8");
 let n = 0, discordN = 1000;
 const blobs = {};

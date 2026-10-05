@@ -101,6 +101,7 @@ Without the secret the workflow does nothing. To stop the posts, delete the secr
 - **The wanted list** (Notify me, Follow a series, Request a comic) posts to this same channel, quietly (no role ping) when a
   customer asks. It pings the staff role, if set, only when there's someone to contact: a sold-out comic is back, or a new issue
   of a followed series was added. Names and phone numbers are kept 120 days, or until removed in the staff area's **Wanted** tab.
+- **Lists load a page at a time.** The Orders and Wanted tabs show the newest 40 and a **Show older** button, so they stay quick (and inside Cloudflare's free-plan limits) however many have built up.
 - **Customer details are stored** (name, phone, address) while the order is kept. Delete a Discord message by hand if you want it gone there.
 - **Trying it locally without Discord:** `npm run dev:api` prints each order's Discord message in the terminal instead of sending it.
   Build the site with `ORDERS_LIVE=1 ORDER_API=http://localhost:8787/orders ADMIN_API=http://localhost:8787 npm run build`, then `npm run serve`.
