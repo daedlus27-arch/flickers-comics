@@ -30,7 +30,7 @@ const BADGES = ["new", "variant", "exclusive"];
 const COVER_RE = /^assets\/covers\/[a-z0-9][a-z0-9._-]{0,80}\.jpg$/;
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,60}$/;
 const USER_RE = /^[a-z0-9][a-z0-9._-]{2,23}$/;
-const MAX_UPLOAD_BYTES = 400 * 1024;
+const MAX_UPLOAD_BYTES = 400 * 1024, MAX_UPLOADS = 30; // each photo is one GitHub call, and a free-plan Worker may make about 50 per request
 const enc = new TextEncoder();
 
 /* ---------- small helpers ---------- */
@@ -172,7 +172,7 @@ async function publish(env, user, body) {
   if (!Array.isArray(body.products) || body.products.length > 2000) throw bad(400, "The stock list isn't valid.");
   const mine = body.products.map(cleanProduct);
   const uploads = body.uploads && typeof body.uploads === "object" ? Object.entries(body.uploads) : [];
-  if (uploads.length > 40) throw bad(400, "Too many new photos in one publish. Publish in smaller batches.");
+  if (uploads.length > MAX_UPLOADS) throw bad(400, `Too many new photos in one publish (the limit is ${MAX_UPLOADS}). Publish in smaller batches.`);
 
   const current = await readStock(env);
   let products = mine, merged = false;
@@ -190,12 +190,9 @@ async function publish(env, user, body) {
 
   const tree = [];
   const referenced = new Set(products.map(p => p.image).filter(Boolean));
-  for (const [path, data] of uploads) {
-    const content = decodeJpeg(data, path);
-    if (!referenced.has(path)) continue; // photo for an item that was deleted again before publishing
-    const blob = await gh(env, "/git/blobs", { method: "POST", body: { content, encoding: "base64" } });
-    tree.push({ path, mode: "100644", type: "blob", sha: blob.sha });
-  }
+  const photos = uploads.map(([path, data]) => [path, decodeJpeg(data, path)]).filter(([path]) => referenced.has(path)); // skips photos for items deleted again before publishing
+  const blobs = await Promise.all(photos.map(([, content]) => gh(env, "/git/blobs", { method: "POST", body: { content, encoding: "base64" } })));
+  photos.forEach(([path], i) => tree.push({ path, mode: "100644", type: "blob", sha: blobs[i].sha }));
   // remove cover photos nothing uses any more
   const oldImages = new Set(current.products.map(p => p.image).filter(Boolean));
   for (const path of oldImages) if (!referenced.has(path) && COVER_RE.test(path)) tree.push({ path, mode: "100644", type: "blob", sha: null });
@@ -299,9 +296,9 @@ async function route(request, env) {
   }
   if (method === "POST" && path === "/publish") return publish(env, user, await readJson(request));
 
-  if (method === "GET" && path === "/orders") return { orders: await listOrders(env), ordersOpen: String(env.ORDERS_ENABLED) === "true", discord: !!env.DISCORD_WEBHOOK_URL };
+  if (method === "GET" && path === "/orders") return { ...(await listOrders(env, url.searchParams.get("cursor"))), ordersOpen: String(env.ORDERS_ENABLED) === "true", discord: !!env.DISCORD_WEBHOOK_URL };
   if (method === "POST" && path === "/orders/test") return sendTestMessage(env, user);
-  if (method === "GET" && path === "/wants") return { wants: await listWants(env) };
+  if (method === "GET" && path === "/wants") return listWants(env, url.searchParams.get("cursor"));
   const wm = /^\/wants\/([^/]+)$/.exec(path);
   if (wm && method === "POST") return updateWant(env, wm[1], await readJson(request), user);
   if (wm && method === "DELETE") return deleteWant(env, wm[1]);

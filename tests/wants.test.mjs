@@ -2,14 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../worker/src/index.js";
+import { FakeKV } from "./helpers.mjs";
 
-class FakeKV {
-  constructor() { this.m = new Map(); this.ttl = new Map(); }
-  async get(k) { return this.m.has(k) ? this.m.get(k) : null; }
-  async put(k, v, o) { this.m.set(k, String(v)); this.ttl.set(k, o && o.expirationTtl); }
-  async delete(k) { this.m.delete(k); }
-  async list({ prefix = "" } = {}) { return { keys: [...this.m.keys()].filter(k => k.startsWith(prefix)).sort().map(name => ({ name })), list_complete: true }; }
-}
 const ORIGIN = "https://shop.example", HOOK = "https://discord.test/api/webhooks/1/secret-token";
 const COMICS = () => [
   { id: "batman-1", cat: "issues", title: "Batman", num: "#1", price: 400, stock: 3, blurb: "x" },
@@ -114,7 +108,7 @@ test("staff see the list, mark people contacted, and remove them", async () => {
   assert.equal(list.wants.length, 1);
   assert.equal(list.wants[0].name, "Jamie Reyes");
   assert.ok(!JSON.stringify(list).includes("secret-token"));
-  let r = await j(call(env, "POST", `/wants/${id}`, { status: "contacted" }, token));
+  const r = await j(call(env, "POST", `/wants/${id}`, { status: "contacted" }, token));
   assert.equal(r.want.status, "contacted");
   assert.equal(r.want.contactedBy, "owner");
   assert.equal((await j(call(env, "POST", `/wants/${id}`, { status: "bogus" }, token))).status, 400);

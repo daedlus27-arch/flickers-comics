@@ -3,14 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../worker/src/index.js";
 import { mergeStock } from "../worker/src/github.js";
+import { FakeKV } from "./helpers.mjs";
 
-class FakeKV {
-  constructor() { this.m = new Map(); this.ttl = new Map(); }
-  async get(k) { return this.m.has(k) ? this.m.get(k) : null; }
-  async put(k, v, o) { this.m.set(k, String(v)); this.ttl.set(k, o && o.expirationTtl); }
-  async delete(k) { this.m.delete(k); }
-  async list({ prefix = "" } = {}) { return { keys: [...this.m.keys()].filter(k => k.startsWith(prefix)).sort().map(name => ({ name })), list_complete: true }; }
-}
 const ORIGIN = "https://shop.example", HOOK = "https://discord.test/api/webhooks/1/secret-token";
 const COMICS = () => [
   { id: "batman-1", cat: "issues", title: "Batman", num: "#1", price: 400, stock: 3, blurb: "x" },
@@ -133,9 +127,9 @@ test("cancelling puts comics back, reopening takes them again, and a sold-out re
 });
 
 test("a cancel that can't return the stock still cancels, and says so", async () => {
-  let st = world(), env = baseEnv(), token = await staff(env);
+  world(); const env = baseEnv(), token = await staff(env);
   const { orderId } = await place(env);
-  st = world({ githubDown: true }); // GitHub goes away after the order
+  world({ githubDown: true }); // GitHub goes away after the order
   const r = await j(await call(env, "POST", `/orders/${orderId}`, { status: "cancelled" }, token));
   assert.equal(r.status, 200);
   assert.equal(r.order.status, "cancelled");
@@ -212,7 +206,7 @@ test("customers can check an order with its number and phone, and see nothing el
   const env = baseEnv(), token = await staff(env);
   const { orderId } = await place(env, { method: "post", collectDate: null, address: "12 Vinewood Blvd, Downtown", notes: "secret note", phone: "(555) 0142" });
   const look = async (id, phone, ip) => j(await call(env, "POST", "/orders/lookup", { id, phone }, null, ip));
-  let r = await look(orderId.toLowerCase(), "5550142");
+  const r = await look(orderId.toLowerCase(), "5550142");
   assert.equal(r.status, 200, "case and phone formatting don't matter");
   assert.equal(r.statusLabel, "New");
   assert.equal(r.items[0].title, "Batman #1");

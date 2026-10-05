@@ -1,7 +1,7 @@
 /* Flickers Comics storefront.
    The shelves and comic pages are rendered at build time (see build/). This script adds the cart,
    quick view, checkout, search and filters on top. Stock and prices come from data/shop.json. */
-import { searchItems, esc, escLines, money, GRADES, catOf, fullTitle, stockWord, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "../shared.mjs";
+import { searchItems, searchWords, norm, isVariant, heartIcon, esc, escLines, money, GRADES, catOf, fullTitle, stockWord, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "../shared.mjs";
 
 const root = document.body.dataset.root || "";
 const $ = id => document.getElementById(id);
@@ -12,8 +12,31 @@ const store = {
 const focusFirst = (rootEl, ...sels) => { for (const s of sels) { const el = rootEl.querySelector(s); if (el) { el.focus(); return; } } };
 const firstName = s => String(s).trim().split(/\s+/)[0] || "";
 const comicUrl = id => `${root}comic/${id}/`;
+const plural = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
 
-let CONFIG, CATEGORIES, PRODUCTS = [], byId = {};
+/* The address's query string is for sharing (shelf, search, cart and wish links); these keep it tidy. */
+function replaceQuery(params) {
+  const qs = params.toString();
+  try { history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash); } catch (e) { /* ignore */ }
+}
+/* Reads a one-off ?name=value link parameter and removes it from the address, leaving the rest alone. Null when it isn't there. */
+function takeParam(name) {
+  let params;
+  try { params = new URLSearchParams(location.search); } catch (e) { return null; }
+  const value = params.get(name);
+  if (value === null) return null;
+  params.delete(name);
+  replaceQuery(params);
+  return value;
+}
+async function postJson(url, body) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  let data = {}; try { data = await res.json(); } catch (e) { /* no body */ }
+  return { ok: res.ok, data };
+}
+
+let CONFIG, CATEGORIES, PRODUCTS = [], byId = {}, index = new Map();
+const apiBase = () => CONFIG.orderApi.replace(/\/orders\/?$/, "");
 const cover = (p, opts) => coverHTML(p, { imgBase: root, ...opts });
 const statusReady = fetch(`${root}data/shop.json?v=${document.body.dataset.build || ""}`).then(r => { if (!r.ok) throw new Error("shop.json " + r.status); return r.json(); });
 
@@ -109,28 +132,33 @@ function writeUrlState() {
   if (filters.sort !== "featured") p.set("sort", filters.sort);
   for (const k of ["instock", "novar", "last"]) if (filters[k]) p.set(k, "1");
   if (filters.max) p.set("max", String(filters.max));
-  const qs = p.toString();
-  try { history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash); } catch (e) { /* ignore */ }
+  replaceQuery(p);
 }
 
+/* What each comic can be found and sorted by, built once from the shop data (the cards themselves carry only an id, shelf and position). */
+function buildIndex() {
+  index = new Map(PRODUCTS.map(p => [p.id, { title: fullTitle(p).toLowerCase(), words: searchWords(p, CATEGORIES), blurb: norm(p.blurb), variant: isVariant(p) }]));
+}
 function applyFilters() {
   if (!grid) return;
-  const cards = [...grid.querySelectorAll(".card")];
+  const cards = [...grid.querySelectorAll(".card")], inGroup = c => filters.group === "all" || c.dataset.group === filters.group;
+  if (!index.size) { cards.forEach(c => { c.hidden = !inGroup(c); }); return; } // shop data not here yet: only the shelf can be applied
   const q = filters.q.trim();
-  const num = c => Number(c.dataset.index), price = c => Number(c.dataset.price);
+  const rows = cards.map(c => ({ c, p: byId[c.dataset.id], i: Number(c.dataset.index) }));
+  rows.filter(r => !r.p).forEach(r => { r.c.hidden = true; }); // a card for something the shop no longer lists
+  const known = rows.filter(r => r.p);
   const sorters = {
-    featured: (a, b) => ((Number(b.dataset.stock) > 0) - (Number(a.dataset.stock) > 0)) || num(a) - num(b),
-    "price-asc": (a, b) => price(a) - price(b) || num(a) - num(b),
-    "price-desc": (a, b) => price(b) - price(a) || num(a) - num(b),
-    title: (a, b) => a.dataset.title.localeCompare(b.dataset.title) || num(a) - num(b)
+    featured: (a, b) => ((b.p.stock > 0) - (a.p.stock > 0)) || a.i - b.i,
+    "price-asc": (a, b) => a.p.price - b.p.price || a.i - b.i,
+    "price-desc": (a, b) => b.p.price - a.p.price || a.i - b.i,
+    title: (a, b) => index.get(a.p.id).title.localeCompare(index.get(b.p.id).title) || a.i - b.i
   };
-  cards.sort(sorters[filters.sort] || sorters.featured);
+  known.sort(sorters[filters.sort] || sorters.featured);
   let shown = 0;
-  const found = searchItems(cards.map(c => ({ words: c.dataset.words.split(" "), blurb: c.dataset.blurb || "" })), q);
-  cards.forEach((c, i) => {
-    const stock = Number(c.dataset.stock), cost = price(c);
-    const ok = (filters.group === "all" || c.dataset.group === filters.group) && found.flags[i]
-      && (!filters.instock || stock > 0) && (!filters.novar || c.dataset.var !== "1") && (!filters.last || (stock >= 1 && stock <= 2)) && (!filters.max || cost <= filters.max);
+  const found = searchItems(known.map(r => index.get(r.p.id)), q);
+  known.forEach(({ c, p }, k) => {
+    const ok = inGroup(c) && found.flags[k]
+      && (!filters.instock || p.stock > 0) && (!filters.novar || !index.get(p.id).variant) && (!filters.last || (p.stock >= 1 && p.stock <= 2)) && (!filters.max || p.price <= filters.max);
     c.hidden = !ok;
     if (ok) shown++;
     grid.appendChild(c);
@@ -184,7 +212,7 @@ function refreshCards() {
 const qv = $("qv");
 let qvState = { id: null, qty: 1 };
 const pageBuyEl = document.querySelector("[data-buy]");
-let pageState = pageBuyEl ? { id: pageBuyEl.dataset.buy, qty: 1 } : null;
+const pageState = pageBuyEl ? { id: pageBuyEl.dataset.buy, qty: 1 } : null;
 const buyMax = p => Math.max(0, p.stock - cartQty(p.id));
 
 function buyCore(p, st) {
@@ -199,10 +227,9 @@ function buyCore(p, st) {
     </div>
     <button type="button" class="btn btn-yellow" data-qv="add">Add to cart · ${money(p.price * st.qty)}</button>`;
 }
-const SAVE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.7 3.7 4.5 7 4.5c2 0 3.7 1.1 5 3 1.3-1.9 3-3 5-3 3.3 0 5.4 3.2 4.2 6.6-1.700 4.800-9.200 9.400-9.200 9.400z"/></svg>';
 function buyHTML(p, st) {
   const live = wantsOn();
-  return buyCore(p, st) + `<div class="buy-extras">${p.stock <= 0 && live ? `<button type="button" class="btn btn-small btn-yellow" data-want="restock" data-id="${esc(p.id)}">Tell me when it's back</button>` : ""}<button type="button" class="link-btn save-link" data-save="${esc(p.id)}" aria-pressed="${isSaved(p.id)}">${SAVE_SVG}Save for later</button>${live ? `<button type="button" class="link-btn" data-want="series" data-id="${esc(p.id)}">Follow ${esc(p.title)}</button>` : ""}</div>`;
+  return buyCore(p, st) + `<div class="buy-extras">${p.stock <= 0 && live ? `<button type="button" class="btn btn-small btn-yellow" data-want="restock" data-id="${esc(p.id)}">Tell me when it's back</button>` : ""}<button type="button" class="link-btn save-link" data-save="${esc(p.id)}" aria-pressed="${isSaved(p.id)}">${heartIcon}Save for later</button>${live ? `<button type="button" class="link-btn" data-want="series" data-id="${esc(p.id)}">Follow ${esc(p.title)}</button>` : ""}</div>`;
 }
 function renderPageBuy() { if (pageBuyEl && byId[pageState.id]) pageBuyEl.innerHTML = buyHTML(byId[pageState.id], pageState); }
 
@@ -390,12 +417,8 @@ async function placeOrder(ev) {
   const btn = $("payBtn"), label = btn.textContent;
   btn.disabled = true; btn.textContent = CONFIG.payOnline ? "Connecting to Fleeca…" : "Sending your order…";
   try {
-    const res = await fetch(CONFIG.orderApi, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: order.name, phone: order.phone, method: order.method, collectDate: order.collectDate, address: order.address, notes: order.notes, items: order.items.map(i => ({ id: i.id, qty: i.qty })) })
-    });
-    let data = {}; try { data = await res.json(); } catch (e) { /* no body */ }
-    if (!res.ok) { const err = new Error(data.error || "bad status"); err.shown = !!data.error; throw err; }
+    const { ok, data } = await postJson(CONFIG.orderApi, { name: order.name, phone: order.phone, method: order.method, collectDate: order.collectDate, address: order.address, notes: order.notes, items: order.items.map(i => ({ id: i.id, qty: i.qty })) });
+    if (!ok) { const err = new Error(data.error || "bad status"); err.shown = !!data.error; throw err; }
     const placed = { ...order, id: data.orderId || order.id, subtotal: data.subtotal ?? order.subtotal, postage: data.postage ?? order.postage, total: data.total ?? order.total, test: false, paid: false };
     if (data.paymentUrl) {
       store.set("flickers-pending-order", placed);
@@ -483,11 +506,8 @@ function resetCheckout() {
 }
 function handlePaymentReturn() {
   // Live mode only: the order service sends shoppers back to  ?order=FC-1234&status=paid  (or failed).
-  let params;
-  try { params = new URLSearchParams(window.location.search); } catch (e) { return; }
-  const id = params.get("order"), status = params.get("status");
+  const id = takeParam("order"), status = takeParam("status");
   if (!id || !status) return;
-  try { history.replaceState(null, "", window.location.pathname + window.location.hash); } catch (e) { /* ignore */ }
   const pending = store.get("flickers-pending-order", null);
   if (status === "paid" && pending && pending.id === id) {
     cart = {}; saveCart(); renderCartUI();
@@ -556,24 +576,19 @@ function openSaved() {
 function addAllSaved() {
   let n = 0;
   for (const id of Object.keys(saved)) if (addToCart(id, 1)) n++;
-  if (n) { bumpCart(); toast(`Added ${n} saved comic${n === 1 ? "" : "s"} to your cart`, { label: "View cart", fn: () => { savedDlg.close(); openDrawer(); } }); }
+  if (n) { bumpCart(); toast(`Added ${plural(n, "saved comic")} to your cart`, { label: "View cart", fn: () => { savedDlg.close(); openDrawer(); } }); }
   else toast("Nothing available to add. Those are sold out or already in your cart.");
 }
 const wishLink = () => new URL(`${root}?wish=${Object.keys(saved).join(",")}`, location.href).href;
 function loadSharedWish() {
-  let params;
-  try { params = new URLSearchParams(location.search); } catch (e) { return; }
-  const raw = params.get("wish");
+  const raw = takeParam("wish");
   if (raw === null) return;
-  params.delete("wish");
-  const qs = params.toString();
-  try { history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash); } catch (e) { /* ignore */ }
   let added = 0, skipped = 0;
   for (const id of raw.slice(0, 3000).split(",").slice(0, 60)) {
     if (!Object.hasOwn(byId, id)) { skipped++; continue; }
     if (!isSaved(id)) { saved[id] = { s: byId[id].stock }; added++; }
   }
-  if (added) { persistSaved(); syncSaved(); toast(`Saved ${added} comic${added === 1 ? "" : "s"} from a shared list${skipped ? ` (${skipped} no longer in the shop)` : ""}`, { label: "View saved", fn: openSaved }); }
+  if (added) { persistSaved(); syncSaved(); toast(`Saved ${plural(added, "comic")} from a shared list${skipped ? ` (${skipped} no longer in the shop)` : ""}`, { label: "View saved", fn: openSaved }); }
   else toast(skipped ? "Those comics are no longer in the shop." : "Those comics were already on your saved list.");
 }
 
@@ -609,9 +624,8 @@ wForm.addEventListener("submit", async ev => {
   const label = btn.textContent;
   btn.disabled = true; btn.textContent = "Sending…";
   try {
-    const res = await fetch(CONFIG.orderApi.replace(/\/orders\/?$/, "") + "/wants", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: wantCtx.kind, productId: wantCtx.id || undefined, text: wantCtx.kind === "request" ? text : undefined, name, phone }) });
-    let data = {}; try { data = await res.json(); } catch (e) { /* no body */ }
-    if (!res.ok) { err.textContent = data.error || "We couldn't send that just now. Try again in a moment."; return; }
+    const { ok, data } = await postJson(apiBase() + "/wants", { kind: wantCtx.kind, productId: wantCtx.id || undefined, text: wantCtx.kind === "request" ? text : undefined, name, phone });
+    if (!ok) { err.textContent = data.error || "We couldn't send that just now. Try again in a moment."; return; }
     const c = WANT_COPY[wantCtx.kind](wantCtx.id ? byId[wantCtx.id] : null);
     $("wantDoneTitle").textContent = data.already ? "You're already on the list" : c.done;
     $("wantDoneMsg").textContent = data.already ? "We have your details for this already, so there's nothing more to do." : c.msg;
@@ -629,13 +643,8 @@ function copyText(text, ok, fail) {
   else toast(fail);
 }
 function loadSharedCart() {
-  let params;
-  try { params = new URLSearchParams(location.search); } catch (e) { return; }
-  const raw = params.get("cart");
+  const raw = takeParam("cart");
   if (raw === null) return;
-  params.delete("cart");
-  const qs = params.toString();
-  try { history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash); } catch (e) { /* ignore */ }
   let added = 0, skipped = 0;
   for (const part of raw.slice(0, 3000).split(",").slice(0, 40)) {
     const [id, q] = part.split(":"), n = Math.min(99, Math.floor(Number(q === undefined ? 1 : q)));
@@ -645,7 +654,7 @@ function loadSharedCart() {
     if (next > before) { cart[id] = next; added += next - before; } else skipped++;
   }
   if (added) { saveCart(); renderCartUI(); bumpCart(); }
-  if (added) toast(`Added ${added} comic${added === 1 ? "" : "s"} from a shared cart${skipped ? ` (${skipped} unavailable)` : ""}`, { label: "View cart", fn: openDrawer });
+  if (added) toast(`Added ${plural(added, "comic")} from a shared cart${skipped ? ` (${skipped} unavailable)` : ""}`, { label: "View cart", fn: openDrawer });
   else toast("The comics in that cart link are sold out or no longer in the shop.");
 }
 
@@ -699,9 +708,8 @@ trForm.addEventListener("submit", async ev => {
   const label = btn.textContent;
   btn.disabled = true; btn.textContent = "Checking…";
   try {
-    const res = await fetch(CONFIG.orderApi.replace(/\/+$/, "") + "/lookup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, phone }) });
-    let data = {}; try { data = await res.json(); } catch (e) { /* no body */ }
-    if (!res.ok) { err.textContent = data.error || "We couldn't check that just now. Try again in a moment."; return; }
+    const { ok, data } = await postJson(CONFIG.orderApi.replace(/\/+$/, "") + "/lookup", { id, phone });
+    if (!ok) { err.textContent = data.error || "We couldn't check that just now. Try again in a moment."; return; }
     trForm.hidden = true; trResult.hidden = false; trResult.innerHTML = trackHTML(data);
     $("trackStatus").focus();
   } catch (e) { err.textContent = "We couldn't reach the shop just now. Check your connection and try again."; }
@@ -710,8 +718,8 @@ trForm.addEventListener("submit", async ev => {
 function enableTracking() {
   if (!CONFIG.orderApi || CONFIG.testMode) return;
   document.querySelectorAll("[data-track]").forEach(b => { b.hidden = false; });
-  const asked = new URLSearchParams(location.search).get("track"); // a link like /?track=FC-7K3PQ2 opens the form with the number filled in
-  if (asked) { try { history.replaceState(null, "", location.pathname + location.hash); } catch (e) { /* ignore */ } openTrack({ id: asked.slice(0, 20) }); }
+  const asked = takeParam("track"); // a link like /?track=FC-7K3PQ2 opens the form with the number filled in
+  if (asked) openTrack({ id: asked.slice(0, 20) });
 }
 
 /* ===================== toast ===================== */
@@ -829,8 +837,8 @@ try {
   cart = sanitizeCart(store.get(CART_KEY, {}));
   renderHours();
   setInterval(renderHours, 60000);
-  renderCartUI();
   saved = sanitizeSaved(store.get(SAVED_KEY, {}));
+  buildIndex();
   syncSaved();
   applyFilters();
   handlePaymentReturn();

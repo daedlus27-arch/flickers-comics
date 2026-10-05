@@ -49,6 +49,14 @@ export function slug(s) {
 export const norm = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
 export const wordsOf = s => norm(s).split(" ").filter(Boolean);
 export const seriesKey = p => norm(p.title) + (p.vol ? "|" + norm(p.vol) : "");
+export const isVariant = p => !!p.variant || (p.badges || []).includes("variant");
+/* the words a comic can be found by, for searchItems */
+export const searchWords = (p, cats) => [...new Set(wordsOf([fullTitle(p), p.title, p.num, p.vol, p.subtitle, p.variant, p.publisher, catOf(cats, p.cat).label].join(" ")))];
+
+/* the save-for-later heart: drawn once per page (heartSprite) and referenced everywhere else */
+export const HEART_PATH = "M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.7 3.7 4.5 7 4.5c2 0 3.7 1.1 5 3 1.3-1.9 3-3 5-3 3.3 0 5.4 3.2 4.2 6.6-1.7 4.8-9.2 9.4-9.2 9.4z";
+export const heartSprite = `<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false"><symbol id="i-heart" viewBox="0 0 24 24"><path d="${HEART_PATH}"/></symbol></svg>`;
+export const heartIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><use href="#i-heart"/></svg>`;
 
 function closeEnough(a, b) { // edit distance of at most `limit`, counting a swapped pair of letters as one edit
   const limit = a.length <= 3 ? 0 : a.length <= 6 ? 1 : 2;

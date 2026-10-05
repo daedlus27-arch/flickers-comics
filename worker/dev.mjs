@@ -13,9 +13,14 @@ import worker, { hashPassword } from "./src/index.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const kv = new Map();
+const meta = new Map();
 const USERS = {
-  get: async k => kv.get(k) ?? null, put: async (k, v) => { kv.set(k, String(v)); }, delete: async k => { kv.delete(k); },
-  list: async ({ prefix = "" } = {}) => ({ keys: [...kv.keys()].filter(k => k.startsWith(prefix)).map(name => ({ name })), list_complete: true })
+  get: async k => kv.get(k) ?? null, put: async (k, v, o) => { kv.set(k, String(v)); if (o && o.metadata) meta.set(k, o.metadata); else meta.delete(k); }, delete: async k => { kv.delete(k); meta.delete(k); },
+  list: async ({ prefix = "", limit = 1000, cursor } = {}) => {
+    const all = [...kv.keys()].filter(k => k.startsWith(prefix)).sort(), start = cursor ? Number(cursor) : 0, done = start + limit >= all.length;
+    const keys = all.slice(start, start + limit).map(name => ({ name, ...(meta.has(name) ? { metadata: meta.get(name) } : {}) }));
+    return done ? { keys, list_complete: true } : { keys, list_complete: false, cursor: String(start + limit) };
+  }
 };
 const env = { USERS, SESSION_SECRET: "dev-secret-not-for-production", SETUP_KEY: "dev", GITHUB_TOKEN: "dev", GITHUB_REPO: "dev/dev", GITHUB_BRANCH: "main", ALLOWED_ORIGINS: "http://localhost:8080",
   SITE_URL: "http://localhost:8080", ORDERS_ENABLED: "true", DISCORD_WEBHOOK_URL: "http://discord.local/api/webhooks/dev/dev" };

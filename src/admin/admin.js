@@ -687,7 +687,9 @@ function shrinkImage(file) {
       const c = document.createElement("canvas"); c.width = w; c.height = h;
       const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
-      resolve(c.toDataURL("image/jpeg", 0.85));
+      let q = 0.85, out = c.toDataURL("image/jpeg", q);
+      while (out.length > 340000 && q > 0.45) out = c.toDataURL("image/jpeg", q -= 0.1); // very detailed art: trade a little quality to stay under the upload limit
+      resolve(out);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That photo couldn't be opened. Try a JPG or PNG.")); };
     img.src = url;
@@ -751,6 +753,19 @@ async function publish() {
     say(e.message, "error", actions);
   }
   if ($("aPublish")) $("aPublish").textContent = "Publish changes";
+}
+
+/* Orders and requests arrive a page at a time (newest first). This keeps the loaded items, and a button that fetches the next page. */
+function pager(path, key, first) {
+  const items = [...first[key]], state = { items, cursor: first.cursor || null };
+  state.more = async () => {
+    const r = await api(`${path}?cursor=${encodeURIComponent(state.cursor)}`);
+    const have = new Set(items.map(x => x.id));
+    r[key].forEach(x => { if (!have.has(x.id)) items.push(x); });
+    state.cursor = r.cursor || null;
+  };
+  state.html = (what) => state.cursor ? `<p class="hint orders-more">Showing the newest ${items.length} ${what}. <button type="button" class="btn btn-small" data-more>Show older ${what}</button></p>` : "";
+  return state;
 }
 
 /* ---------- orders tab ---------- */
@@ -826,7 +841,7 @@ async function renderOrders() {
     <div id="ordersList"></div>`;
   let data;
   try { data = await api("/orders"); } catch (e) { say(e.message, "error"); return; }
-  const orders = data.orders, open = new Set();
+  const pg = pager("/orders", "orders", data), orders = pg.items, open = new Set();
   let filter = "open";
 
   $("ordersTop").innerHTML = `<div class="orders-status">
@@ -850,6 +865,8 @@ async function renderOrders() {
     if (filter === "archive") list.sort((a, b) => Date.parse(b.completedAt || 0) - Date.parse(a.completedAt || 0));
     $("ordersList").innerHTML = list.length ? list.map(o => orderHTML(o, open.has(o.id))).join("")
       : `<p class="admin-empty">${filter === "open" ? "No open orders." : "Nothing in the archive."}</p>`;
+    $("ordersList").insertAdjacentHTML("beforeend", pg.html("orders"));
+    $("csvBtn").disabled = !orders.length;
   };
   $("ordersFilter").addEventListener("click", ev => {
     const b = ev.target.closest("[data-filter]"); if (!b) return;
@@ -857,7 +874,9 @@ async function renderOrders() {
     $("ordersFilter").querySelector(`[data-filter="${filter}"]`).focus();
   });
   $("ordersList").addEventListener("toggle", ev => { const id = ev.target.dataset && ev.target.dataset.order; if (id) (ev.target.open ? open.add(id) : open.delete(id)); }, true);
-  $("ordersList").addEventListener("click", ev => {
+  $("ordersList").addEventListener("click", async ev => {
+    const more = ev.target.closest("[data-more]");
+    if (more) { more.disabled = true; try { await pg.more(); paint(); } catch (e) { more.disabled = false; say(e.message, "error"); } return; }
     const b = ev.target.closest("[data-oid]"); if (!b) return;
     const id = b.dataset.oid, o = orders.find(x => x.id === id); if (!o) return;
     const body = b.dataset.status ? { status: b.dataset.status } : { paid: b.dataset.paid === "yes" };
@@ -909,16 +928,18 @@ async function renderWanted() {
     <div id="wantedList"><p class="hint">Loading…</p></div>`;
   let data;
   try { data = await api("/wants"); } catch (e) { say(e.message, "error"); $("wantedList").innerHTML = ""; return; }
-  const wants = data.wants;
+  const pg = pager("/wants", "wants", data), wants = pg.items;
   const paint = () => {
     const todo = wants.filter(wantNeedsAction), waiting = wants.filter(w => w.status !== "contacted" && !wantNeedsAction(w)), done = wants.filter(w => w.status === "contacted");
     const section = (title, list, empty) => `<h2 class="want-h">${title} <span class="pill">${list.length}</span></h2>${list.length ? `<ul class="wants">${list.map(wantHTML).join("")}</ul>` : `<p class="admin-empty">${empty}</p>`}`;
     $("wantedList").innerHTML = wants.length
       ? section("Ready to contact", todo, "Nobody to contact right now.") + section("Waiting", waiting, "Nobody waiting.") + section("Contacted", done, "No one contacted yet.")
       : `<p class="admin-empty">Nothing here yet. Requests appear when customers use Notify me, Follow, or Request a comic on the shop.</p>`;
+    $("wantedList").insertAdjacentHTML("beforeend", pg.html("requests"));
   };
-  $("wantedList").addEventListener("click", ev => {
-    const s = ev.target.closest("[data-wid]"), d = ev.target.closest("[data-wdelete]");
+  $("wantedList").addEventListener("click", async ev => {
+    const more = ev.target.closest("[data-more]"), s = ev.target.closest("[data-wid]"), d = ev.target.closest("[data-wdelete]");
+    if (more) { more.disabled = true; try { await pg.more(); paint(); } catch (e) { more.disabled = false; say(e.message, "error"); } return; }
     if (s) {
       s.disabled = true;
       api(`/wants/${encodeURIComponent(s.dataset.wid)}`, { method: "POST", body: { status: s.dataset.wstatus } })

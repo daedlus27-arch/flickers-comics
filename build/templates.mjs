@@ -1,8 +1,8 @@
 /* HTML templates for the pre-rendered site. Everything here runs at build time. */
-import { esc, money, fullTitle, metaLine, catOf, coverHTML, hoursText, DAYS, hoursShort, stockWord, GRADES, norm, wordsOf } from "../src/shared.mjs";
+import { esc, money, fullTitle, metaLine, catOf, coverHTML, hoursText, hoursShort, DAYS, stockWord, GRADES, isVariant, heartSprite, heartIcon } from "../src/shared.mjs";
 
 const X = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
-export const SITE_NAME = "Flickers Comics";
+const SITE_NAME = "Flickers Comics";
 export const BUILD_ID = Date.now().toString(36);
 export const DEFAULT_DESC = "Independent comic shop. Order online, then collect at the counter or have it posted to you.";
 
@@ -39,7 +39,7 @@ ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(
 </head>
 <body data-root="${root}" data-build="${BUILD_ID}">
 ${script === "js/site.js" ? `<noscript><p class="page-note">JavaScript is off, so you can browse but not order. Turn it on to add comics to a cart.</p></noscript>` : ""}
-${body}
+${script === "js/site.js" ? heartSprite : ""}${script === "js/site.js" ? heartSprite : ""}${body}
 ${script ? `<script type="module" src="${root}${script}"></script>` : ""}
 </body>
 </html>
@@ -47,7 +47,7 @@ ${script ? `<script type="module" src="${root}${script}"></script>` : ""}
 }
 
 /* ---------- chrome ---------- */
-export function topStrip(cfg) {
+function topStrip(cfg) {
   return `<section class="topstrip" aria-label="Opening hours and postage">
   <div class="wrap topstrip-in">
     <span class="status" id="stripStatus"><span class="status-dot" aria-hidden="true"></span><span id="stripStatusText">Open every day, ${hoursText(cfg)}</span></span>
@@ -63,7 +63,7 @@ export function header(root, { logo = "assets/flickers-logo.png" } = {}) {
     <div class="header-actions">
       <nav class="nav" aria-label="Main"><a href="${root}#shop">Shop</a><a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>
       <button type="button" class="saved-btn" id="savedBtn" aria-haspopup="dialog" hidden>
-        ${HEART}
+        ${heartIcon}
         <span class="saved-word">Saved</span>
         <span class="saved-count" id="savedCount">0</span>
       </button>
@@ -94,7 +94,7 @@ export function footer(root, cfg) {
 }
 
 /* Quick view, cart drawer, checkout and toast. Filled in by js/site.js. */
-export function dialogs(cfg) {
+function dialogs(cfg) {
   return `<dialog class="qv" id="qv" aria-labelledby="qvTitle"><div id="qvBody"></div></dialog>
 
 <dialog class="drawer" id="drawer" aria-labelledby="drawerTitle">
@@ -257,7 +257,7 @@ export function dialogs(cfg) {
 
 
 /* ---------- product pieces ---------- */
-export function stickerHTML(p) {
+function stickerHTML(p) {
   const b = p.badges || [];
   if (p.stock <= 0) return "";
   if (b.includes("variant")) return `<span class="sticker sticker-variant" aria-hidden="true">Variant</span>`;
@@ -265,13 +265,11 @@ export function stickerHTML(p) {
   if (b.includes("new")) return `<span class="sticker sticker-new" aria-hidden="true">New!</span>`;
   return "";
 }
-export const isVariant = p => !!p.variant || (p.badges || []).includes("variant");
-const HEART = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.700 3.700 4.500 7 4.500c2 0 3.700 1.100 5 3 1.300-1.900 3-3 5-3 3.300 0 5.400 3.200 4.200 6.600-1.700 4.800-9.200 9.400-9.200 9.400z"/></svg>`;
 /* the save-for-later heart: hidden until the script switches it on */
-export const heartButton = (p, t, cls = "heart") => `<button type="button" class="${cls}" data-save="${esc(p.id)}" aria-pressed="false" aria-label="Save ${esc(t)} for later" hidden>${HEART}</button>`;
+const heartButton = (p, t, cls = "heart") => `<button type="button" class="${cls}" data-save="${esc(p.id)}" aria-pressed="false" aria-label="Save ${esc(t)} for later" hidden>${heartIcon}</button>`;
 export const comicUrl = (root, p) => `${root}comic/${p.id}/`;
 
-export function cardHTML(p, ctx, i) {
+function cardHTML(p, ctx, i) {
   const { root, cats, groupKey } = ctx;
   const t = fullTitle(p), url = comicUrl(root, p);
   const extras = [];
@@ -279,9 +277,8 @@ export function cardHTML(p, ctx, i) {
   if (p.staff) extras.push("staff pick");
   if (p.stock <= 0) extras.push("sold out");
   const low = p.stock <= 0 ? `<span class="low">Sold out</span>` : p.stock <= 2 ? `<span class="low">Only ${p.stock} left</span>` : "";
-  const words = [...new Set(wordsOf([t, p.title, p.num, p.vol, p.subtitle, p.variant, p.publisher, catOf(cats, p.cat).label].join(" ")))].join(" ");
   const soldOff = p.stock <= 0;
-  return `<article class="card" data-id="${esc(p.id)}" data-group="${esc(groupKey(p))}" data-price="${p.price}" data-stock="${p.stock}" data-var="${isVariant(p) ? 1 : 0}" data-title="${esc(t.toLowerCase())}" data-index="${i}" data-words="${esc(words)}" data-blurb="${esc(norm(p.blurb))}">
+  return `<article class="card" data-id="${esc(p.id)}" data-group="${esc(groupKey(p))}" data-index="${i}">
     <a class="cover-btn" href="${url}" data-open="${esc(p.id)}" aria-label="${esc(t)}${extras.length ? ", " + extras.join(", ") : ""}. View details">
       ${coverHTML(p, { imgBase: root })}${stickerHTML(p)}${p.staff ? `<span class="talker" aria-hidden="true">Staff pick!</span>` : ""}
     </a>
@@ -298,7 +295,7 @@ export function cardHTML(p, ctx, i) {
   </article>`;
 }
 
-export function detailHTML(p, cats, root) {
+function detailHTML(p, cats, root) {
   const t = fullTitle(p);
   const rows = [["Format", catOf(cats, p.cat).one]];
   if (p.publisher) rows.push(["Publisher", p.publisher]);
@@ -324,7 +321,7 @@ export function detailHTML(p, cats, root) {
 
 /* ---------- pages ---------- */
 export function homePage(ctx) {
-  const { cfg, cats, products, featured, groups, groupLabel, root = "" } = ctx;
+  const { cfg, products, featured, groups, root = "" } = ctx;
   const byId = new Map(products.map(p => [p.id, p]));
   const hero = featured.map(id => byId.get(id)).filter(Boolean).slice(0, 3);
   const fan = hero.map((p, i) => `<a class="fan fan-${i + 1}" href="${comicUrl(root, p)}" data-open="${esc(p.id)}" aria-label="${esc(fullTitle(p))}. View details">${coverHTML(p, { imgBase: root, priority: i === 1, lazy: false, sizes: "(min-width: 860px) 200px, 40vw" })}</a>`).join("");

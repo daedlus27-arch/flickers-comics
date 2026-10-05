@@ -204,15 +204,12 @@ export async function placeOrder(env, raw, ip) {
   return { orderId: order.id, subtotal: order.subtotal, postage: order.postage, total: order.total, paid: false };
 }
 
-export async function listOrders(env) {
-  const out = [];
-  let cursor;
-  do {
-    const page = await env.USERS.list({ prefix: "order:", cursor, limit: 100 });
-    for (const k of page.keys) { const raw = await env.USERS.get(k.name); if (raw) { const o = JSON.parse(raw); if (!expired(o)) out.push(o); } }
-    cursor = page.list_complete || out.length >= 200 ? undefined : page.cursor;
-  } while (cursor);
-  return out.slice(0, 200);
+/* One page of orders, newest first (the keys sort that way); `cursor` fetches the next page. Kept small because each read is a KV call
+   and a Worker on the free plan may make only about 50 per request. */
+export async function listOrders(env, cursor) {
+  const page = await env.USERS.list({ prefix: "order:", cursor: cursor || undefined, limit: 40 });
+  const rows = await Promise.all(page.keys.map(k => env.USERS.get(k.name)));
+  return { orders: rows.filter(Boolean).map(raw => JSON.parse(raw)).filter(o => !expired(o)), cursor: page.list_complete ? null : page.cursor };
 }
 
 async function findOrderKey(env, id) {

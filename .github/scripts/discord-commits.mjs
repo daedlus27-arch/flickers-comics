@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const escMd = s => String(s).replace(/([\\*_~`|>\[\]])/g, "\\$1").replace(/</g, "\\<").replace(/@/g, "@\u200b");
+const escMd = s => String(s).replace(/([\\*_~`|>[\]])/g, "\\$1").replace(/</g, "\\<").replace(/@/g, "@\u200b");
 const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
 export function buildMessage(event, env = {}) {

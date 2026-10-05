@@ -360,6 +360,8 @@ dialog::backdrop{background:var(--scrim)}
 .chip-select select{padding:4px 8px;border:0;border-radius:999px;background:transparent;color:inherit;font:inherit;font-weight:800;cursor:pointer}
 .chips .link-btn{font-size:14px}
 .heart{position:absolute;top:8px;left:8px;z-index:3;display:grid;place-items:center;width:36px;height:36px;padding:0;border:2px solid var(--ink-fixed);border-radius:50%;background:#FBFAF6;color:var(--ink-fixed);cursor:pointer;box-shadow:2px 2px 0 rgba(0,0,0,.35)}
+.sprite{position:absolute}
+.sprite{position:absolute}
 .heart[hidden]{display:none}
 .heart svg{width:19px;height:19px}
 .heart[aria-pressed="true"]{background:var(--magenta);border-color:var(--ink-fixed);color:#fff}

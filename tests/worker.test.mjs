@@ -1,15 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker, { hashPassword, verifyPassword, signToken, verifyToken } from "../worker/src/index.js";
+import { FakeKV } from "./helpers.mjs";
 
 /* ---------- fakes ---------- */
-class FakeKV {
-  constructor() { this.m = new Map(); }
-  async get(k) { return this.m.has(k) ? this.m.get(k) : null; }
-  async put(k, v) { this.m.set(k, String(v)); }
-  async delete(k) { this.m.delete(k); }
-  async list({ prefix = "" } = {}) { return { keys: [...this.m.keys()].filter(k => k.startsWith(prefix)).map(name => ({ name })), list_complete: true }; }
-}
 const ORIGIN = "https://shop.example";
 const baseEnv = () => ({
   USERS: new FakeKV(), SESSION_SECRET: "test-secret-0123456789", SETUP_KEY: "setup-key", GITHUB_TOKEN: "ghp_fake",

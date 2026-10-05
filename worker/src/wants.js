@@ -11,7 +11,7 @@ import { escMd, cut, pingRole, webhook } from "./discord.js";
 import { fullTitle, norm, seriesKey } from "../../src/shared.mjs";
 
 const WANT_TTL = 120 * 24 * 3600;
-const WANTS_PER_WINDOW = 8, WINDOW_SECONDS = 600, MAX_WANTS = 600;
+const WANTS_PER_WINDOW = 8, WINDOW_SECONDS = 600, MAX_WANTS = 600, PAGE = 40;
 const ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const KINDS = ["restock", "series", "request"];
 export const WANT_STATUSES = ["waiting", "contacted"];
@@ -25,17 +25,23 @@ const dupKey = w => `wdup:${w.kind}:${w.kind === "request" ? norm(w.text) : w.ki
 const ttlFor = w => Math.max(60, Math.floor(WANT_TTL - (Date.now() - Date.parse(w.createdAt)) / 1000));
 const seriesTitle = p => p.title + (p.vol ? " " + p.vol : "");
 
-async function allWants(env) {
+/* Workers allow only a few dozen KV calls per request on the free plan, and each read is one, so nothing here reads the whole list.
+   Each want is stored with a little metadata (kind, comic, series) that a key listing returns for free, so a scan only reads the few that match. */
+const metaOf = w => ({ k: w.kind, ...(w.productId ? { p: w.productId } : {}), ...(w.seriesKey ? { s: w.seriesKey.slice(0, 200) } : {}) });
+const save = (env, w) => env.USERS.put(wantKey(w), JSON.stringify(w), { expirationTtl: ttlFor(w), metadata: metaOf(w) });
+const readAll = async (env, keys) => (await Promise.all(keys.map(k => env.USERS.get(k.name)))).filter(Boolean).map(raw => JSON.parse(raw));
+async function wantKeys(env) {
   const out = [];
   let cursor;
   do {
-    const page = await env.USERS.list({ prefix: "want:", cursor, limit: 200 });
-    for (const k of page.keys) { const raw = await env.USERS.get(k.name); if (raw) out.push(JSON.parse(raw)); }
-    cursor = page.list_complete || out.length >= MAX_WANTS + 100 ? undefined : page.cursor;
+    const page = await env.USERS.list({ prefix: "want:", cursor });
+    out.push(...page.keys);
+    cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
   return out;
 }
-const save = (env, w) => env.USERS.put(wantKey(w), JSON.stringify(w), { expirationTtl: ttlFor(w) });
+/* the wants whose metadata passes `test` (wants saved before metadata existed are read to be sure), at most PAGE of them */
+const wantsWhere = async (env, test) => (await readAll(env, (await wantKeys(env)).filter(k => !k.metadata || test(k.metadata)).slice(0, PAGE)));
 
 /* ---------- customers ---------- */
 export async function createWant(env, raw, ip) {
@@ -63,7 +69,7 @@ export async function createWant(env, raw, ip) {
 
   const dk = dupKey(w), existing = await env.USERS.get(dk);
   if (existing) return { ok: true, already: true, id: existing };
-  if ((await allWants(env)).length >= MAX_WANTS) throw bad(503, "The wanted list is full right now. Please ask in store.");
+  if ((await wantKeys(env)).length >= MAX_WANTS) throw bad(503, "The wanted list is full right now. Please ask in store.");
   await save(env, w);
   await env.USERS.put(`wid:${w.id}`, wantKey(w), { expirationTtl: WANT_TTL });
   await env.USERS.put(dk, w.id, { expirationTtl: WANT_TTL });
@@ -77,7 +83,11 @@ export async function createWant(env, raw, ip) {
 }
 
 /* ---------- staff ---------- */
-export const listWants = async env => (await allWants(env)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+/* One page, newest first (keys sort that way); `cursor` fetches the next. */
+export async function listWants(env, cursor) {
+  const page = await env.USERS.list({ prefix: "want:", cursor: cursor || undefined, limit: PAGE });
+  return { wants: await readAll(env, page.keys), cursor: page.list_complete ? null : page.cursor };
+}
 
 async function findWant(env, id) {
   if (!WANT_ID_RE.test(String(id))) throw bad(400, "That isn't a request number.");
@@ -109,7 +119,8 @@ export async function announceRestocks(env, before, after) {
   const was = new Map((before || []).map(p => [p.id, p.stock]));
   const back = (after || []).filter(p => p.stock > 0 && was.has(p.id) && was.get(p.id) <= 0);
   if (!back.length) return;
-  const wants = (await allWants(env)).filter(w => w.kind === "restock" && !w.backAt);
+  const ids = new Set(back.map(p => p.id));
+  const wants = (await wantsWhere(env, m => m.k === "restock" && ids.has(m.p))).filter(w => w.kind === "restock" && !w.backAt);
   const role = pingRole(env);
   for (const p of back) {
     const group = wants.filter(w => w.productId === p.id);
@@ -129,7 +140,8 @@ export async function announceNewIssues(env, before, after) {
   const had = new Set((before || []).map(p => p.id));
   const fresh = (after || []).filter(p => !had.has(p.id) && p.stock > 0);
   if (!fresh.length) return;
-  const follows = (await allWants(env)).filter(w => w.kind === "series");
+  const keys = new Set(fresh.map(seriesKey));
+  const follows = (await wantsWhere(env, m => m.k === "series" && keys.has(m.s))).filter(w => w.kind === "series");
   if (!follows.length) return;
   const role = pingRole(env);
   for (const p of fresh) {

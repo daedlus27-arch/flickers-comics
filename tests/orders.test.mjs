@@ -2,14 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../worker/src/index.js";
 import { buildOrder, orderEmbed } from "../worker/src/orders.js";
+import { FakeKV } from "./helpers.mjs";
 
-class FakeKV {
-  constructor() { this.m = new Map(); }
-  async get(k) { return this.m.has(k) ? this.m.get(k) : null; }
-  async put(k, v) { this.m.set(k, String(v)); }
-  async delete(k) { this.m.delete(k); }
-  async list({ prefix = "", limit = 1000 } = {}) { return { keys: [...this.m.keys()].filter(k => k.startsWith(prefix)).sort().slice(0, limit).map(name => ({ name })), list_complete: true }; }
-}
 const ORIGIN = "https://shop.example", HOOK = "https://discord.test/api/webhooks/1/secret-token";
 const SHOP = {
   config: { postage: 1000, openHour: 20, closeHour: 22, collectDaysAhead: 14 },
