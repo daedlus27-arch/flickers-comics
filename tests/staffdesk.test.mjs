@@ -133,3 +133,11 @@ test("reorder data counts who is waiting, what sold lately and what customers as
   assert.ok(env.USERS.ops <= 10, `used ${env.USERS.ops} KV calls`);
   assert.equal((await j(call(env, "GET", "/reorder"))).status, 401);
 });
+
+test("an order with no phone number still makes a valid Discord post (no empty field)", async () => {
+  const st = world(), env = baseEnv(), token = await owner(env);
+  await j(call(env, "POST", "/staff/orders", { name: "Walk-in", method: "collect", items: [{ id: "a", qty: 1 }] }, token));
+  const fields = orderPosts(st)[0].embeds[0].fields;
+  assert.ok(fields.every(f => f.value && f.value.length > 0), "Discord rejects empty field values");
+  assert.equal(fields.find(f => f.name === "Phone").value, "—");
+});

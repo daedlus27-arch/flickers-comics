@@ -127,7 +127,7 @@ export function orderEmbed(o, cfg = {}) {
   }[status] || "";
   const fields = [
     { name: "Customer", value: cut(escMd(o.name), 200), inline: true },
-    { name: "Phone", value: cut(escMd(o.phone), 100), inline: true },
+    { name: "Phone", value: o.phone ? cut(escMd(o.phone), 100) : "—", inline: true },
     { name: "Payment", value: o.paid ? "Paid" : "Not paid yet", inline: true },
     collect
       ? { name: "Collect on", value: `${o.collectDate}${cfg.openHour != null ? ", " + hoursText(cfg) : ""}` }
@@ -169,7 +169,7 @@ async function postToDiscord(env, order, cfg) {
 const editDiscord = (env, order, cfg) => webhook(env, { method: "PATCH", messageId: order.discordId, payload: { embeds: [orderEmbed(order, cfg)], allowed_mentions: { parse: [] } } });
 /* A short follow-up message, used when an order is ready, so staff are nudged to contact the customer. */
 function announceReady(env, o) {
-  const role = pingRole(env), who = `${escMd(o.name)} on ${escMd(o.phone)}`;
+  const role = pingRole(env), who = o.phone ? `${escMd(o.name)} on ${escMd(o.phone)}` : escMd(o.name);
   const text = o.method === "collect" ? `Order ${o.id} is ready to collect. Let ${who} know.` : `Order ${o.id} is packed and ready to post. Let ${who} know it's on its way.`;
   return webhook(env, { payload: { username: "Flickers Orders", content: (role ? `<@&${role}> ` : "") + text, allowed_mentions: { parse: [], roles: role ? [role] : [] } } });
 }
