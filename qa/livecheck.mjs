@@ -1,0 +1,32 @@
+/* A look at the live shop that never places an order or leaves a request: node livecheck.mjs [address] */
+import { launch } from "./lib.mjs";
+import { dealDiscount } from "../src/shared.mjs";
+const BASE = process.argv[2] || "https://flickerscomics.github.io";
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const results = [];
+const check = (name, ok, extra = "") => { results.push(ok); console.log((ok ? "PASS " : "FAIL ") + name + (extra ? "  [" + extra + "]" : "")); };
+const shop = await (await fetch(BASE + "/data/shop.json")).json();
+check("the published shop data carries the deal", !!(shop.config.deal && shop.config.deal.enabled), JSON.stringify(shop.config.deal));
+const browser = await launch();
+const page = await browser.newPage();
+await page.setViewport({ width: 1100, height: 900 });
+const errors = []; page.on("pageerror", e => errors.push(e.message));
+await page.goto(BASE + "/", { waitUntil: "networkidle0" });
+await page.evaluate(() => localStorage.clear()); await page.reload({ waitUntil: "networkidle0" });
+const ids = (await page.$$eval(".card .add:not([aria-disabled=true])", b => b.slice(0, 3).map(x => x.dataset.add)));
+const byId = Object.fromEntries(shop.products.map(p => [p.id, p]));
+for (const id of ids) { await page.$eval(`.card[data-id="${id}"] .add`, b => b.click()); await sleep(250); }
+await page.$eval("#cartBtn", b => b.click()); await sleep(300);
+const expected = dealDiscount(ids.map(id => ({ price: byId[id].price, qty: 1 })), shop.config.deal).discount;
+check("three comics in the cart take the cheapest off", (await page.$eval("#drawerDeal", e => e.textContent)) === "−$" + expected.toLocaleString("en-US") && expected > 0, await page.$eval("#drawerDeal", e => e.textContent));
+await page.evaluate(() => localStorage.clear());
+const series = await page.goto(BASE + "/series/", { waitUntil: "networkidle0" });
+check("the series list is there", series.ok() && (await page.$$eval(".grid .card", c => c.length)) > 0);
+const admin = await page.goto(BASE + "/admin/", { waitUntil: "networkidle0" });
+check("the staff area loads", admin.ok() && (await page.$("#loginForm")) !== null);
+check("no page errors", errors.length === 0, errors.join(" | "));
+await browser.close();
+const api = shop.config.orderApi.replace(/\/orders\/?$/, "");
+const noLogin = await fetch(api + "/report", { headers: { Origin: BASE } });
+check("the sales report needs a sign-in", noLogin.status === 401);
+console.log(`\n${results.filter(Boolean).length}/${results.length} passed`);
