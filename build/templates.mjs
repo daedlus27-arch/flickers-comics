@@ -85,7 +85,7 @@ export function footer(root, cfg) {
     <img class="footer-logo" src="${root}assets/flickers-logo.png" alt="Flickers Comics" width="640" height="104" loading="lazy">
     <div class="footer-cols">
       <div><h2>Hours</h2><p>Every day, ${hoursText(cfg)}</p></div>
-      <div><h2>Orders</h2><p>Collect in store: free<br>Postage: ${money(cfg.postage)}</p><p class="footer-track"><button type="button" class="link-btn" data-track hidden>Track an order</button><br><button type="button" class="link-btn" data-want="request" hidden>Request a comic</button></p></div>
+      <div><h2>Orders</h2><p>Collect in store: free<br>Postage: ${money(cfg.postage)}</p><p class="footer-track"><button type="button" class="link-btn" data-track hidden>Track an order</button><button type="button" class="link-btn" data-want="request" hidden>Request a comic</button></p></div>
       <div><h2>Payment</h2><p>${cfg.payOnline ? "Pay from your bank account<br>through Fleeca" : "Online payment through<br>Fleeca is coming soon"}</p></div>
     </div>
     <p class="fine">© Flickers Comics. All prices in dollars. <a class="footer-link" href="${root}admin/">Staff login</a></p>

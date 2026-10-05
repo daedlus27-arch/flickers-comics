@@ -207,6 +207,7 @@ h1,h2,h3{text-wrap:balance}
 .card{display:flex;flex-direction:column;gap:12px;min-width:0}
 .cover-btn{position:relative;display:block;width:100%;padding:0;border:0;border-radius:3px;background:none;color:inherit;text-align:left;text-decoration:none}
 .cover{position:relative;display:block;width:100%;aspect-ratio:2/3;overflow:hidden;border-radius:3px;background:#2A2D2C;box-shadow:var(--shadow);transition:transform .2s ease,box-shadow .2s ease}
+.cover picture{display:contents}
 .cover svg,.cover img{display:block;width:100%;height:100%;object-fit:cover}
 .cover::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(115deg,rgba(255,255,255,0) 34%,rgba(255,255,255,.2) 44%,rgba(255,255,255,0) 54%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.22);pointer-events:none}
 .cover-btn:hover .cover{transform:translateY(-5px) rotate(-.8deg);box-shadow:0 22px 30px -16px rgba(0,0,0,.6)}
@@ -496,3 +497,25 @@ legend{margin-bottom:12px;padding:0;font-family:var(--font-display);font-size:24
 }
 /* skip painting the cards that are far off screen: a long shelf stays smooth on slow phones */
 .card{content-visibility:auto;contain-intrinsic-size:auto 440px}
+
+/* ---------- Windows high contrast ----------
+   System colours replace backgrounds, so anything that showed its state with a fill needs another cue. */
+@media (forced-colors:active){
+  .hero h1 .mark{transform:none;box-shadow:none}
+  .divider[aria-pressed="true"],.chip[aria-pressed="true"],.heart[aria-pressed="true"]{background:Highlight;color:HighlightText;forced-color-adjust:none}
+  .sticker,.talker,.rack-sticker,.sold-band{border:1px solid CanvasText}
+  .qty-n{border-inline:1px solid CanvasText}
+}
+
+/* ---------- printing: a plain price list ---------- */
+@media print{
+  :root:root{color-scheme:light;--paper:#fff;--paper-raised:#fff;--ink:#000;--ink-soft:#333;--rule:#999}
+  body{background:#fff!important;color:#000!important}
+  .skip,.topstrip,.header-actions,.nav,.subnav,.hero,.tools,.chips,.dividers,.section-sub,.heart,.add,.qv-buy,.buy-extras,.toast,.site-footer,#how,#hours,dialog,.page-note,.rack,.sticker,.talker,.empty,.request-line,.results{display:none!important}
+  .site-header{position:static;border-bottom:2px solid #000}
+  .grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:14px!important}
+  .card{break-inside:avoid;content-visibility:visible;box-shadow:none}
+  .card[hidden]{display:none}
+  .price-tag{background:none;transform:none}
+  a{color:inherit;text-decoration:none}
+}

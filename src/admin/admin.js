@@ -604,7 +604,7 @@ async function setEditorCover(file) {
   try {
     const c = await makeCover(file, F("title").value);
     ED.image = c.path; ED.newUpload = c; S.previews[c.path] = c.url;
-    updatePreview(); coverNote("Cover added. Save the item to keep it.");
+    updatePreview(); coverNote(`Cover added (${Math.round(c.b64.length * 0.75 / 1024)} KB). Save the item to keep it.`);
   } catch (e) { coverNote(e.message, true); }
 }
 async function setRowCover(id, file) {

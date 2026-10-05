@@ -27,6 +27,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: covers-${{ hashFiles('assets/covers/**', 'build/build.mjs') }}
+          restore-keys: covers-
       - run: npm test
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3

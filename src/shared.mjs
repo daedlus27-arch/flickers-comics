@@ -122,13 +122,14 @@ export function placeholderCover(p, extra = "") {
     + extra + `</span>`;
 }
 
-/* A cover for the browser: `src` is the (relative) URL prefix for covers, `variants` the built sizes. */
+/* A cover: AVIF where the browser can show it, WebP otherwise. `imgBase` is the (relative) URL prefix for covers. */
 export function coverHTML(p, { imgBase = "", lazy = true, sizes = "(min-width: 1100px) 200px, (min-width: 700px) 22vw, 45vw", priority = false } = {}) {
   if (!p.image) return placeholderCover(p);
   const name = coverName(p.image);
   const src = `${imgBase}img/covers/${name}`;
   const sold = p.stock <= 0;
-  return `<span class="cover${sold ? " is-sold" : ""}"><img src="${src}-450.webp" srcset="${src}-300.webp 300w, ${src}-450.webp 450w, ${src}-600.webp 600w" sizes="${sizes}" width="300" height="450" alt=""${priority ? ' fetchpriority="high"' : lazy ? ' loading="lazy" decoding="async"' : ""}>${sold ? `<span class="sold-band" aria-hidden="true">Sold out</span>` : ""}</span>`;
+  const set = ext => [300, 450, 600].map(w => `${src}-${w}.${ext} ${w}w`).join(", ");
+  return `<span class="cover${sold ? " is-sold" : ""}"><picture><source type="image/avif" srcset="${set("avif")}" sizes="${sizes}"><img src="${src}-450.webp" srcset="${set("webp")}" sizes="${sizes}" width="300" height="450" alt=""${priority ? ' fetchpriority="high"' : lazy ? ' loading="lazy" decoding="async"' : ""}></picture>${sold ? `<span class="sold-band" aria-hidden="true">Sold out</span>` : ""}</span>`;
 }
 /* "assets/covers/batman-423-muu6wx03.jpg" -> "batman-423-muu6wx03" */
 export function coverName(path) { return String(path).split("/").pop().replace(/\.[a-z0-9]+$/i, ""); }

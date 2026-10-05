@@ -3,6 +3,7 @@
    Run with: npm run build */
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import * as esbuild from "esbuild";
@@ -91,16 +92,33 @@ await esbuild.build({
 for (const f of ["flickers-logo.png", "favicon.png", "apple-touch-icon.png"]) cp(`assets/${f}`, `assets/${f}`);
 wr(".nojekyll", "");
 
-/* ---------- covers: webp at three sizes ---------- */
-const images = [...new Set(products.map(p => p.image).filter(Boolean))];
-await Promise.all(images.flatMap(img => {
-  const name = coverName(img), input = path.join(ROOT, img);
-  return [[300, 68], [450, 70], [600, 72]].map(async ([w, q]) => {
-    const out = path.join(DIST, "img", "covers", `${name}-${w}.webp`);
-    fs.mkdirSync(path.dirname(out), { recursive: true });
-    await sharp(input).rotate().resize({ width: w, withoutEnlargement: false }).webp({ quality: q, effort: 5 }).toFile(out);
-  });
+/* ---------- covers: AVIF and WebP at three sizes ----------
+   Encoding is the slow part of a build, so each result is kept in .cache/ (keyed by the picture's contents and the settings)
+   and only pictures that are new or changed get encoded. Bump ENCODING when the settings below change. */
+const ENCODING = "1";
+const SIZES = [[300, 68, 46], [450, 70, 48], [600, 72, 50]]; // width, WebP quality, AVIF quality
+const CACHE = path.join(ROOT, ".cache", "covers");
+fs.mkdirSync(CACHE, { recursive: true });
+const images = [...new Set(products.map(p => p.image).filter(Boolean))], inUse = new Set();
+await Promise.all(images.map(async img => {
+  const name = coverName(img), bytes = fs.readFileSync(path.join(ROOT, img));
+  const digest = crypto.createHash("sha1").update(bytes).update(ENCODING).digest("hex").slice(0, 16);
+  for (const [w, webpQ, avifQ] of SIZES) {
+    for (const [ext, quality] of [["webp", webpQ], ["avif", avifQ]]) {
+      const kept = path.join(CACHE, `${digest}-${w}.${ext}`);
+      inUse.add(path.basename(kept));
+      if (!fs.existsSync(kept)) {
+        const pic = sharp(bytes).rotate().resize({ width: w, withoutEnlargement: false });
+        await (ext === "webp" ? pic.webp({ quality, effort: 5 }) : pic.avif({ quality, effort: 4 })).toFile(kept + ".tmp");
+        fs.renameSync(kept + ".tmp", kept);
+      }
+      const out = path.join(DIST, "img", "covers", `${name}-${w}.${ext}`);
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      fs.copyFileSync(kept, out);
+    }
+  }
 }));
+for (const old of fs.readdirSync(CACHE)) if (!inUse.has(old)) fs.rmSync(path.join(CACHE, old), { force: true }); // pictures that were replaced or removed
 
 /* ---------- social share image ---------- */
 {
@@ -110,7 +128,7 @@ await Promise.all(images.flatMap(img => {
   const layers = [{ input: logo, left: 64, top: 240 }];
   covers.forEach((b, i) => layers.push({ input: b, left: 760 + i * 130, top: 150 + (i === 1 ? -30 : 20) }));
   const base = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"><rect width="1200" height="630" fill="#0E1211"/><rect y="0" width="1200" height="24" fill="#FFE912"/><rect y="606" width="1200" height="24" fill="#FFE912"/></svg>`);
-  await sharp(base).composite(layers).png().toFile(path.join(DIST, "assets", "og.png"));
+  await sharp(base).composite(layers).png({ palette: true, quality: 90, effort: 7 }).toFile(path.join(DIST, "assets", "og.png"));
 }
 
 /* ---------- pages ---------- */

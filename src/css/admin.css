@@ -134,6 +134,7 @@ kbd{white-space:nowrap;padding:1px 6px;border:1px solid var(--rule);border-botto
 .list-pick{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
 .list-pick .admin-select{padding:6px 10px;font-size:14px}
 .list-tip{margin:8px 0 0}
+@media (hover:none){.list-tip{display:none}}
 
 .want-h{display:flex;align-items:center;gap:10px;margin:22px 0 4px;font-family:var(--font-display);font-weight:400;font-size:24px;text-transform:uppercase}
 .wants{margin:0;padding:0;list-style:none}
