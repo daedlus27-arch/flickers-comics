@@ -51,6 +51,7 @@ function verdict(out, code) {
 
 let server = null, failures = 0;
 try {
+  if (await up("http://localhost:8787/")) throw new Error("The pretend staff service is already running on port 8787 (npm run dev:api?). Stop it first; this runner starts its own.");
   if (!(await up("http://localhost:8080/"))) { server = node(["build/serve.mjs"], {}, { stdio: "ignore" }); await waitFor("http://localhost:8080/"); }
   for (const step of PLAN) {
     const checks = step.checks.filter(c => !only.length || only.includes(c));

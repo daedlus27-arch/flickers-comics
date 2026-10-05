@@ -1,5 +1,5 @@
 /* HTML templates for the pre-rendered site. Everything here runs at build time. */
-import { esc, money, fullTitle, metaLine, catOf, coverHTML, hoursText, hoursShort, DAYS, stockWord, GRADES, isVariant, heartSprite, heartIcon } from "../src/shared.mjs";
+import { esc, money, fullTitle, metaLine, coverHTML, hoursText, hoursShort, DAYS, isVariant, heartSprite, heartIcon, stickerHTML, detailHTML } from "../src/shared.mjs";
 
 const X = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
 const SITE_NAME = "Flickers Comics";
@@ -257,14 +257,6 @@ function dialogs(cfg) {
 
 
 /* ---------- product pieces ---------- */
-function stickerHTML(p) {
-  const b = p.badges || [];
-  if (p.stock <= 0) return "";
-  if (b.includes("variant")) return `<span class="sticker sticker-variant" aria-hidden="true">Variant</span>`;
-  if (b.includes("exclusive")) return `<span class="sticker sticker-exclusive" aria-hidden="true">Exclusive</span>`;
-  if (b.includes("new")) return `<span class="sticker sticker-new" aria-hidden="true">New!</span>`;
-  return "";
-}
 /* the save-for-later heart: hidden until the script switches it on */
 const heartButton = (p, t, cls = "heart") => `<button type="button" class="${cls}" data-save="${esc(p.id)}" aria-pressed="false" aria-label="Save ${esc(t)} for later" hidden>${heartIcon}</button>`;
 export const comicUrl = (root, p) => `${root}comic/${p.id}/`;
@@ -293,30 +285,6 @@ function cardHTML(p, ctx, i) {
       </div>
     </div>
   </article>`;
-}
-
-function detailHTML(p, cats, root) {
-  const t = fullTitle(p);
-  const rows = [["Format", catOf(cats, p.cat).one]];
-  if (p.publisher) rows.push(["Publisher", p.publisher]);
-  if (p.grade) { const code = p.grade.split(" ")[0]; rows.push(["Condition", `${p.grade} (${GRADES[code] || code})`]); }
-  if (p.variant) rows.push([p.cat === "funko" ? "Finish" : "Edition", p.variant]);
-  if (p.collects) rows.push(["Contents", p.collects]);
-  if (p.pages) rows.push(["Pages", Number(p.pages).toLocaleString("en-US")]);
-  if (p.cat === "funko") rows.push(["Figure", p.num]);
-  rows.push(["Stock", stockWord(p)]);
-  return `<div class="qv-in">
-    <div class="qv-cover">${coverHTML(p, { imgBase: root, priority: true, sizes: "(min-width: 640px) 340px, 260px" })}${stickerHTML(p)}</div>
-    <div class="qv-info">
-      <p class="eyebrow">${esc(catOf(cats, p.cat).one)}</p>
-      <h1 class="qv-title">${esc(t)}</h1>
-      <p class="qv-price">${money(p.price)}</p>
-      ${p.blurb ? `<p class="qv-blurb">${esc(p.blurb)}</p>` : ""}
-      ${p.staff ? `<p class="qv-talker">“${esc(p.staff)}”<small>Staff pick</small></p>` : ""}
-      <dl class="specs">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
-      <div class="qv-buy" data-buy="${esc(p.id)}">${p.stock <= 0 ? `<p class="qv-limit">This one is sold out.</p>` : ""}</div>
-    </div>
-  </div>`;
 }
 
 /* ---------- pages ---------- */
@@ -461,7 +429,7 @@ ${header(root)}
 <main id="item" class="item-page">
   <div class="wrap">
     <nav aria-label="Breadcrumb"><ol class="crumbs"><li><a href="${root}">Home</a></li><li><a href="${root}#shop">The shelves</a></li><li aria-current="page">${esc(t)}</li></ol></nav>
-    ${detailHTML(p, cats, root)}
+    ${detailHTML(p, cats, { imgBase: root, cover: { priority: true, sizes: "(min-width: 640px) 340px, 260px" }, buy: `<div class="qv-buy" data-buy="${esc(p.id)}">${p.stock <= 0 ? `<p class="qv-limit">This one is sold out.</p>` : ""}</div>` })}
   </div>
 </main>
 ${related.length ? `<section class="more" aria-labelledby="moreTitle"><div class="wrap">

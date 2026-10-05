@@ -133,3 +133,39 @@ export function coverHTML(p, { imgBase = "", lazy = true, sizes = "(min-width: 1
 }
 /* "assets/covers/batman-423-muu6wx03.jpg" -> "batman-423-muu6wx03" */
 export function coverName(path) { return String(path).split("/").pop().replace(/\.[a-z0-9]+$/i, ""); }
+
+/* ---------- a comic's detail block (comic page and quick view) ---------- */
+export function stickerHTML(p) {
+  const b = p.badges || [];
+  if (p.stock <= 0) return "";
+  if (b.includes("variant")) return `<span class="sticker sticker-variant" aria-hidden="true">Variant</span>`;
+  if (b.includes("exclusive")) return `<span class="sticker sticker-exclusive" aria-hidden="true">Exclusive</span>`;
+  if (b.includes("new")) return `<span class="sticker sticker-new" aria-hidden="true">New!</span>`;
+  return "";
+}
+export function specRows(p, cats) {
+  const rows = [["Format", catOf(cats, p.cat).one]];
+  if (p.publisher) rows.push(["Publisher", p.publisher]);
+  if (p.grade) { const code = p.grade.split(" ")[0]; rows.push(["Condition", `${p.grade} (${GRADES[code] || code})`]); }
+  if (p.variant) rows.push([p.cat === "funko" ? "Finish" : "Edition", p.variant]);
+  if (p.collects) rows.push(["Contents", p.collects]);
+  if (p.pages) rows.push(["Pages", Number(p.pages).toLocaleString("en-US")]);
+  if (p.cat === "funko") rows.push(["Figure", p.num]);
+  rows.push(["Stock", stockWord(p)]);
+  return rows;
+}
+/* `before` goes first (the quick view's close button), `buy` and `after` close the info column. `level` is the heading level: 1 on a comic's own page, 2 in the quick view. */
+export function detailHTML(p, cats, { imgBase = "", level = 1, headingId = "", cover = {}, before = "", buy = "", after = "" } = {}) {
+  return `<div class="qv-in">${before}
+    <div class="qv-cover">${coverHTML(p, { imgBase, ...cover })}${stickerHTML(p)}</div>
+    <div class="qv-info">
+      <p class="eyebrow">${esc(catOf(cats, p.cat).one)}</p>
+      <h${level} class="qv-title"${headingId ? ` id="${headingId}"` : ""}>${esc(fullTitle(p))}</h${level}>
+      <p class="qv-price">${money(p.price)}</p>
+      ${p.blurb ? `<p class="qv-blurb">${esc(p.blurb)}</p>` : ""}
+      ${p.staff ? `<p class="qv-talker">“${esc(p.staff)}”<small>Staff pick</small></p>` : ""}
+      <dl class="specs">${specRows(p, cats).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
+      ${buy}${after}
+    </div>
+  </div>`;
+}

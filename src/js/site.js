@@ -1,7 +1,7 @@
 /* Flickers Comics storefront.
    The shelves and comic pages are rendered at build time (see build/). This script adds the cart,
    quick view, checkout, search and filters on top. Stock and prices come from data/shop.json. */
-import { searchItems, searchWords, norm, isVariant, heartIcon, esc, escLines, money, GRADES, catOf, fullTitle, stockWord, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "../shared.mjs";
+import { searchItems, searchWords, norm, isVariant, heartIcon, detailHTML, esc, escLines, money, fullTitle, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "../shared.mjs";
 
 const root = document.body.dataset.root || "";
 const $ = id => document.getElementById(id);
@@ -12,6 +12,8 @@ const store = {
 const focusFirst = (rootEl, ...sels) => { for (const s of sels) { const el = rootEl.querySelector(s); if (el) { el.focus(); return; } } };
 const firstName = s => String(s).trim().split(/\s+/)[0] || "";
 const comicUrl = id => `${root}comic/${id}/`;
+/* the dialogs; each is filled in and opened by the code below */
+const qv = $("qv"), drawer = $("drawer"), co = $("co"), tr = $("track"), savedDlg = $("saved"), wd = $("want");
 const plural = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
 
 /* The address's query string is for sharing (shelf, search, cart and wish links); these keep it tidy. */
@@ -209,7 +211,6 @@ function refreshCards() {
 }
 
 /* ===================== buy box (quick view and comic page) ===================== */
-const qv = $("qv");
 let qvState = { id: null, qty: 1 };
 const pageBuyEl = document.querySelector("[data-buy]");
 const pageState = pageBuyEl ? { id: pageBuyEl.dataset.buy, qty: 1 } : null;
@@ -235,29 +236,12 @@ function renderPageBuy() { if (pageBuyEl && byId[pageState.id]) pageBuyEl.innerH
 
 function renderQV() {
   const p = byId[qvState.id]; if (!p) return;
-  const rows = [["Format", catOf(CATEGORIES, p.cat).one]];
-  if (p.publisher) rows.push(["Publisher", p.publisher]);
-  if (p.grade) { const code = p.grade.split(" ")[0]; rows.push(["Condition", `${p.grade} (${GRADES[code] || code})`]); }
-  if (p.variant) rows.push([p.cat === "funko" ? "Finish" : "Edition", p.variant]);
-  if (p.collects) rows.push(["Contents", p.collects]);
-  if (p.pages) rows.push(["Pages", p.pages.toLocaleString("en-US")]);
-  if (p.cat === "funko") rows.push(["Figure", p.num]);
-  rows.push(["Stock", stockWord(p)]);
-  const sticker = (p.stock > 0 && (p.badges || []).includes("new")) ? `<span class="sticker sticker-new" aria-hidden="true">New!</span>` : "";
-  $("qvBody").innerHTML = `<div class="qv-in">
-    <button type="button" class="icon-btn qv-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-    <div class="qv-cover">${cover(p, { lazy: false, sizes: "220px" })}${sticker}</div>
-    <div class="qv-info">
-      <p class="eyebrow">${esc(catOf(CATEGORIES, p.cat).one)}</p>
-      <h2 class="qv-title" id="qvTitle">${esc(fullTitle(p))}</h2>
-      <p class="qv-price">${money(p.price)}</p>
-      ${p.blurb ? `<p class="qv-blurb">${esc(p.blurb)}</p>` : ""}
-      ${p.staff ? `<p class="qv-talker">“${esc(p.staff)}”<small>Staff pick</small></p>` : ""}
-      <dl class="specs">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
-      <div class="qv-buy">${buyHTML(p, qvState)}</div>
-      <p class="hint"><a href="${comicUrl(p.id)}">Open the full page</a></p>
-    </div>
-  </div>`;
+  $("qvBody").innerHTML = detailHTML(p, CATEGORIES, {
+    imgBase: root, level: 2, headingId: "qvTitle", cover: { lazy: false, sizes: "220px" },
+    before: `<button type="button" class="icon-btn qv-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`,
+    buy: `<div class="qv-buy">${buyHTML(p, qvState)}</div>`,
+    after: `<p class="hint"><a href="${comicUrl(p.id)}">Open the full page</a></p>`
+  });
 }
 function openQuickView(id) {
   qvState = { id, qty: 1 };
@@ -267,7 +251,6 @@ function openQuickView(id) {
 }
 
 /* ===================== cart drawer ===================== */
-const drawer = $("drawer");
 function renderLines() {
   const entries = Object.entries(cart);
   $("cartEmpty").hidden = entries.length > 0;
@@ -309,7 +292,7 @@ function renderCartUI() {
   if (qv.open && qvState.id) { const keep = document.activeElement; renderQV(); if (keep && keep.dataset && keep.dataset.qv) focusFirst(qv, `[data-qv="${keep.dataset.qv}"]:not(:disabled)`, '[data-qv="add"]'); }
   if (pageBuyEl) renderPageBuy();
   if (co.open && !$("coFormView").hidden) renderSummary();
-  if (typeof savedDlg !== "undefined" && savedDlg.open) renderSavedLines();
+  if (savedDlg.open) renderSavedLines();
 }
 function openDrawer() {
   if (qv.open) qv.close();
@@ -319,7 +302,7 @@ function openDrawer() {
 function bumpCart() { const b = $("cartBtn"); b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump"); }
 
 /* ===================== checkout ===================== */
-const co = $("co"), form = $("coForm");
+const form = $("coForm");
 const F = { name: $("f-name"), phone: $("f-phone"), date: $("f-date"), address: $("f-address"), notes: $("f-notes") };
 const getMethod = () => (form.querySelector('input[name="method"]:checked') || {}).value || "collect";
 function totals() { const sub = cartSubtotal(), post = getMethod() === "post" ? CONFIG.postage : 0; return { sub, post, total: sub + post }; }
@@ -523,7 +506,6 @@ function handlePaymentReturn() {
 // Kept in this browser only. Remembers each comic's stock when it was saved, so a sold-out comic can be flagged "Back in stock".
 const SAVED_KEY = "flickers-saved-v1";
 let saved = {};
-const savedDlg = $("saved");
 const sanitizeSaved = raw => {
   const out = {};
   if (raw && typeof raw === "object") for (const [id, v] of Object.entries(raw)) if (Object.hasOwn(byId, id)) out[id] = { s: Math.max(0, Math.floor(Number(v && v.s) || 0)) };
@@ -593,7 +575,7 @@ function loadSharedWish() {
 }
 
 /* ===================== wanted list: notify me, follow a series, request a comic ===================== */
-const wd = $("want"), wForm = $("wantForm");
+const wForm = $("wantForm");
 let wantCtx = null;
 const WANT_COPY = {
   restock: p => ({ title: "Tell me when it's back", intro: `Leave your details and we'll let you know when ${fullTitle(p)} is back on the shelves.`, button: "Notify me", done: "You're on the list", msg: `We'll text you when ${fullTitle(p)} is back.` }),
@@ -659,7 +641,7 @@ function loadSharedCart() {
 }
 
 /* ===================== tracking an order ===================== */
-const tr = $("track"), trForm = $("trackForm"), trResult = $("trackResult");
+const trForm = $("trackForm"), trResult = $("trackResult");
 let lastOrder = null; // the order just placed in this visit, so its tracking page can open without retyping
 const TRACK_TEXT = {
   new: () => "We've got your order and we're getting it ready. We'll text you as soon as it is.",
