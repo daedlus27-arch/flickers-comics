@@ -58,6 +58,19 @@ Until Fleeca is connected, orders are logged as **Payment pending**: the shop an
 When Fleeca is ready, set `"payOnline": true` and the checkout button changes to "Pay with Fleeca" (that part still needs
 the payment link built into the Worker).
 
+## Posting commits to a channel
+
+Every push to `main` (staff stock publishes, the automatic stock commits from orders, and code changes) can be posted to a
+Discord channel by `.github/workflows/discord-commits.yml`. Use a **staff-only** channel: commit messages include order
+numbers and staff usernames.
+
+1. In Discord make a webhook for that channel (channel gear → Integrations → Webhooks → New Webhook → Copy Webhook URL).
+2. In GitHub open the repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
+   Name it `DISCORD_COMMITS_WEBHOOK` and paste the URL as the value. It's stored encrypted and never appears in the code or logs.
+3. Open the **Actions** tab → **Commits to Discord** → **Run workflow** to send a "Connected" test message.
+
+Without the secret the workflow does nothing. To stop the posts, delete the secret.
+
 ## What the Worker checks
 
 - Prices, titles and stock come from the shop's own published data. The browser only says which comics and how many,

@@ -1,0 +1,21 @@
+name: Commits to Discord
+
+# Posts every push to main (staff stock publishes, order stock changes and code changes) to a Discord channel.
+# Needs the repository secret DISCORD_COMMITS_WEBHOOK. Without it this does nothing. "Run workflow" sends a test message.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - run: node .github/scripts/discord-commits.mjs
+        env:
+          DISCORD_COMMITS_WEBHOOK: ${{ secrets.DISCORD_COMMITS_WEBHOOK }}
