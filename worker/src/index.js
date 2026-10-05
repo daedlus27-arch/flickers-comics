@@ -17,7 +17,8 @@
    Orders and Discord (src/orders.js, docs/DISCORD.md): SITE_URL, ORDERS_ENABLED, DISCORD_WEBHOOK_URL, DISCORD_PING_ROLE */
 
 import { HttpError, bad } from "./http.js";
-import { placeOrder, listOrders, sendTestMessage, updateOrder } from "./orders.js";
+import { placeOrder, lookupOrder, listOrders, sendTestMessage, updateOrder } from "./orders.js";
+import { gh, readStock, branchName, serializeProducts, mergeStock } from "./github.js";
 
 const PBKDF2_ITERATIONS = 100000; // Cloudflare Workers allows at most 100,000
 const SESSION_HOURS = 12;
@@ -36,8 +37,6 @@ const b64 = bytes => { let s = ""; bytes.forEach(b => { s += String.fromCharCode
 const unb64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
 const b64url = bytes => b64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const unb64url = str => unb64(str.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - str.length % 4) % 4));
-const textToB64 = text => b64(enc.encode(text));
-const b64ToText = str => new TextDecoder().decode(unb64(str.replace(/\s/g, "")));
 
 
 function equalBytes(a, b) {
@@ -124,36 +123,6 @@ async function throttle(env, key, limit) {
 }
 const noteFailure = (env, key, n) => env.USERS.put(key, String(n + 1), { expirationTtl: 900 });
 
-/* ---------- GitHub ---------- */
-async function gh(env, path, opts = {}) {
-  const res = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}${path}`, {
-    method: opts.method || "GET",
-    headers: {
-      Accept: "application/vnd.github+json", Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-      "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "flickers-comics-worker",
-      ...(opts.body ? { "Content-Type": "application/json" } : {})
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined
-  });
-  if (!res.ok) {
-    let msg = ""; try { msg = (await res.json()).message || ""; } catch (e) { /* no body */ }
-    console.error("GitHub", res.status, path, msg);
-    throw bad(502, `GitHub refused the request (${res.status}). ${res.status === 401 || res.status === 403 || res.status === 404 ? "The Worker's GitHub token may have expired or lack access to the repo." : "Try again in a moment."}`);
-  }
-  return res.status === 204 ? null : res.json();
-}
-const branchRef = env => `/git/ref/heads/${encodeURIComponent(env.GITHUB_BRANCH || "main")}`;
-
-async function readStock(env) {
-  const ref = await gh(env, branchRef(env));
-  const head = ref.object.sha;
-  const [products, featured] = await Promise.all([
-    gh(env, `/contents/data/products.json?ref=${head}`),
-    gh(env, `/contents/data/featured.json?ref=${head}`)
-  ]);
-  return { head, version: products.sha, products: JSON.parse(b64ToText(products.content)), featured: JSON.parse(b64ToText(featured.content)) };
-}
-
 /* ---------- validating what staff send ---------- */
 const str = (v, max) => (v == null ? "" : String(v).trim().slice(0, max));
 export function cleanProduct(raw, i) {
@@ -200,15 +169,22 @@ function decodeJpeg(b64Str, path) {
 
 async function publish(env, user, body) {
   if (!Array.isArray(body.products) || body.products.length > 2000) throw bad(400, "The stock list isn't valid.");
-  const products = body.products.map(cleanProduct);
-  const ids = new Set();
-  for (const p of products) { if (ids.has(p.id)) throw bad(400, `Two items share the id "${p.id}".`); ids.add(p.id); }
-  const featured = (Array.isArray(body.featured) ? body.featured : []).filter(id => ids.has(id)).slice(0, 3);
+  const mine = body.products.map(cleanProduct);
   const uploads = body.uploads && typeof body.uploads === "object" ? Object.entries(body.uploads) : [];
   if (uploads.length > 40) throw bad(400, "Too many new photos in one publish. Publish in smaller batches.");
 
   const current = await readStock(env);
-  if (current.version !== body.version) throw bad(409, "Someone else published stock changes after you loaded the stock. Reload to get their changes.");
+  let products = mine, merged = false;
+  if (current.version !== body.version) {
+    // The stock changed after staff loaded it (an order took stock off the shelf, or a colleague published).
+    // Lay their changes onto the latest stock rather than overwriting it.
+    if (!Array.isArray(body.base) || body.base.length > 2000) throw bad(409, "The stock changed after you loaded it. Reload to get the latest.");
+    products = mergeStock(body.base.map(cleanProduct), mine, current.products).map(cleanProduct);
+    merged = true;
+  }
+  const ids = new Set();
+  for (const p of products) { if (ids.has(p.id)) throw bad(400, `Two items share the id "${p.id}".`); ids.add(p.id); }
+  const featured = (Array.isArray(body.featured) ? body.featured : []).filter(id => ids.has(id)).slice(0, 3);
   const commit = await gh(env, `/git/commits/${current.head}`);
 
   const tree = [];
@@ -224,7 +200,7 @@ async function publish(env, user, body) {
   for (const path of oldImages) if (!referenced.has(path) && COVER_RE.test(path)) tree.push({ path, mode: "100644", type: "blob", sha: null });
   for (const p of products) if (p.image && !oldImages.has(p.image) && !uploads.some(([path]) => path === p.image)) throw bad(400, `${p.id}: its cover photo wasn't uploaded.`);
 
-  const productsBlob = await gh(env, "/git/blobs", { method: "POST", body: { content: "[\n" + products.map(p => " " + JSON.stringify(p)).join(",\n") + "\n]\n", encoding: "utf-8" } });
+  const productsBlob = await gh(env, "/git/blobs", { method: "POST", body: { content: serializeProducts(products), encoding: "utf-8" } });
   tree.push({ path: "data/products.json", mode: "100644", type: "blob", sha: productsBlob.sha });
   const featuredBlob = await gh(env, "/git/blobs", { method: "POST", body: { content: JSON.stringify(featured, null, 2) + "\n", encoding: "utf-8" } });
   tree.push({ path: "data/featured.json", mode: "100644", type: "blob", sha: featuredBlob.sha });
@@ -234,12 +210,12 @@ async function publish(env, user, body) {
   const edited = products.filter(p => before.has(p.id) && before.get(p.id) !== JSON.stringify(p)).length;
   const removed = [...before.keys()].filter(id => !ids.has(id)).length;
   const parts = [added && `${added} added`, edited && `${edited} edited`, removed && `${removed} removed`, JSON.stringify(featured) !== JSON.stringify(current.featured) && "new this week updated"].filter(Boolean);
-  if (!parts.length && !tree.some(t => t.path.startsWith("assets/"))) return { ok: true, version: current.version, unchanged: true };
+  if (!parts.length && !tree.some(t => t.path.startsWith("assets/"))) return { ok: true, version: current.version, unchanged: true, ...(merged ? { merged, products } : {}) };
 
   const newTree = await gh(env, "/git/trees", { method: "POST", body: { base_tree: commit.tree.sha, tree } });
   const newCommit = await gh(env, "/git/commits", { method: "POST", body: { message: `Update stock (${user.username}): ${parts.join(", ") || "photos"}`, tree: newTree.sha, parents: [current.head] } });
-  await gh(env, `/git/refs/heads/${encodeURIComponent(env.GITHUB_BRANCH || "main")}`, { method: "PATCH", body: { sha: newCommit.sha, force: false } });
-  return { ok: true, version: productsBlob.sha, commit: newCommit.sha };
+  await gh(env, `/git/refs/heads/${branchName(env)}`, { method: "PATCH", body: { sha: newCommit.sha, force: false } });
+  return { ok: true, version: productsBlob.sha, commit: newCommit.sha, ...(merged ? { merged, products } : {}) };
 }
 
 /* ---------- http ---------- */
@@ -297,6 +273,7 @@ async function route(request, env) {
   }
 
   if (method === "POST" && path === "/orders") return placeOrder(env, await readJson(request), ip);
+  if (method === "POST" && path === "/orders/lookup") return lookupOrder(env, await readJson(request), ip);
 
   const user = await authenticate(request, env);
 

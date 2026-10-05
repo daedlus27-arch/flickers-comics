@@ -385,6 +385,7 @@ async function placeOrder(ev) {
     }
     cart = {}; saveCart(); renderCartUI();
     btn.disabled = false;
+    lastOrder = { id: placed.id, phone: placed.phone };
     showDone(placed);
   } catch (e) {
     $("formError").textContent = e.shown ? e.message : "We couldn't send your order. Check your connection and try again.";
@@ -445,6 +446,7 @@ function showDone(o) {
           ? `Come to the counter on ${esc(fmtDate(o.collectDate))} between ${hLabel(CONFIG.openHour)} and ${hLabel(CONFIG.closeHour)} and give your order number.`
           : "We post your order to the address you gave and text you when it's on its way."}</p>
         <p>We'll text ${esc(o.phone)} if anything changes.</p>
+        ${o.test || !lastOrder ? "" : '<p><button type="button" class="link-btn" data-track-this>Check on this order any time</button></p>'}
       </div>
     </div>
     ${o.test ? discordPreview(o) : ""}
@@ -476,6 +478,71 @@ function handlePaymentReturn() {
   } else if (status !== "paid") {
     toast("Your payment didn't go through, so nothing was charged. Your cart is still here.");
   }
+}
+
+/* ===================== tracking an order ===================== */
+const tr = $("track"), trForm = $("trackForm"), trResult = $("trackResult");
+let lastOrder = null; // the order just placed in this visit, so its tracking page can open without retyping
+const TRACK_TEXT = {
+  new: () => "We've got your order and we're getting it ready. We'll text you as soon as it is.",
+  ready: o => o.method === "collect"
+    ? `It's ready. Come to the counter${o.collectDate ? " on " + fmtDate(o.collectDate) : ""} between ${hLabel(CONFIG.openHour)} and ${hLabel(CONFIG.closeHour)} and give your order number.`
+    : "It's packed and will be posted to you shortly.",
+  done: o => (o.method === "collect" ? "Collected. Thanks for shopping with Flickers Comics." : "Posted. It's on its way to you."),
+  cancelled: () => "This order was cancelled. If that's a surprise, get in touch with the shop."
+};
+function trackHTML(o) {
+  const collect = o.method === "collect", labels = ["Received", "Ready", collect ? "Collected" : "Posted"];
+  const at = { new: 0, ready: 1, done: 2 }[o.state];
+  const steps = o.state === "cancelled" ? "" : `<ol class="steps" aria-label="Order progress">${labels.map((l, i) => {
+    const cls = o.state === "done" || i < at ? "is-done" : i === at ? "is-current" : "";
+    return `<li${cls ? ` class="${cls}"` : ""}${i === at && o.state !== "done" ? ' aria-current="step"' : ""}>${l}${cls === "is-done" ? '<span class="sr-only"> (done)</span>' : ""}</li>`;
+  }).join("")}</ol>`;
+  return `<div class="track-result">
+    <p class="eyebrow">Order ${esc(o.id)}</p>
+    <h3 class="track-status" id="trackStatus" tabindex="-1">${esc(o.state === "ready" ? (collect ? "Ready to collect" : "Packed") : o.statusLabel)}</h3>
+    <p class="track-msg">${esc(TRACK_TEXT[o.state](o))}</p>
+    ${steps}
+    <dl class="done-dl">
+      <dt>Items</dt><dd>${o.items.map(i => `${i.qty} × ${esc(i.title)}`).join("<br>")}</dd>
+      <dt>Total</dt><dd><strong>${money(o.total)}</strong>${o.postage ? ` <span class="hint">incl. ${money(o.postage)} postage</span>` : ""}</dd>
+      <dt>Payment</dt><dd>${o.paid ? "Paid" : "Not paid yet"}</dd>
+    </dl>
+    <p class="hint">Finished orders are kept for two weeks, then deleted.</p>
+    <div><button type="button" class="btn btn-small" data-track-again>Check another order</button></div>
+  </div>`;
+}
+function openTrack(pre = {}, auto = false) {
+  if (co.open) co.close();
+  if (drawer.open) drawer.close();
+  trForm.hidden = false; trResult.hidden = true; trResult.innerHTML = "";
+  $("t-id").value = pre.id || ""; $("t-phone").value = pre.phone || "";
+  $("trackError").textContent = "";
+  tr.showModal();
+  tr.scrollTop = 0;
+  if (auto && pre.id && pre.phone) trForm.requestSubmit(); else (pre.id ? $("t-phone") : $("t-id")).focus();
+}
+trForm.addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const id = $("t-id").value.trim(), phone = $("t-phone").value.trim(), err = $("trackError"), btn = $("trackBtn");
+  err.textContent = "";
+  if (!id || !phone) { err.textContent = "Enter your order number and the phone number you gave."; return; }
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = "Checking…";
+  try {
+    const res = await fetch(CONFIG.orderApi.replace(/\/+$/, "") + "/lookup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, phone }) });
+    let data = {}; try { data = await res.json(); } catch (e) { /* no body */ }
+    if (!res.ok) { err.textContent = data.error || "We couldn't check that just now. Try again in a moment."; return; }
+    trForm.hidden = true; trResult.hidden = false; trResult.innerHTML = trackHTML(data);
+    $("trackStatus").focus();
+  } catch (e) { err.textContent = "We couldn't reach the shop just now. Check your connection and try again."; }
+  finally { btn.disabled = false; btn.textContent = label; }
+});
+function enableTracking() {
+  if (!CONFIG.orderApi || CONFIG.testMode) return;
+  document.querySelectorAll("[data-track]").forEach(b => { b.hidden = false; });
+  const asked = new URLSearchParams(location.search).get("track"); // a link like /?track=FC-7K3PQ2 opens the form with the number filled in
+  if (asked) { try { history.replaceState(null, "", location.pathname + location.hash); } catch (e) { /* ignore */ } openTrack({ id: asked.slice(0, 20) }); }
 }
 
 /* ===================== toast ===================== */
@@ -514,9 +581,12 @@ function buyAction(action, st, rerender, inDialog) {
 }
 
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-open],[data-add],.divider[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close],[data-copy]");
+  const t = ev.target.closest("[data-open],[data-add],.divider[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close],[data-copy],[data-track],[data-track-this],[data-track-again]");
   if (!t) return;
   const d = t.dataset;
+  if ("track" in d) { openTrack(); return; }
+  if ("trackThis" in d) { openTrack(lastOrder, true); return; }
+  if ("trackAgain" in d) { trForm.hidden = false; trResult.hidden = true; trResult.innerHTML = ""; $("t-id").value = ""; $("t-phone").value = ""; $("t-id").focus(); return; }
   if (d.copy) {
     const done = () => toast("Order number copied.");
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(d.copy).then(done, () => toast("Couldn't copy. Select the number and copy it by hand."));
@@ -544,7 +614,7 @@ document.addEventListener("click", ev => {
   }
 });
 
-[qv, drawer, co].forEach(dlg => dlg.addEventListener("click", ev => { if (ev.target === dlg) dlg.close(); }));
+[qv, drawer, co, tr].forEach(dlg => dlg.addEventListener("click", ev => { if (ev.target === dlg) dlg.close(); }));
 co.addEventListener("close", () => { if (!$("coDoneView").hidden) resetCheckout(); });
 $("cartBtn").addEventListener("click", openDrawer);
 $("checkoutBtn").addEventListener("click", openCheckout);
@@ -580,6 +650,7 @@ try {
   renderCartUI();
   applyFilters();
   handlePaymentReturn();
+  enableTracking();
 } catch (e) {
   // The pre-rendered pages still read fine without it; only the cart is unavailable.
   const btn = $("cartBtn");

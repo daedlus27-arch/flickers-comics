@@ -29,9 +29,15 @@ Above the list you can **Show** only low stock (1 or 2 left), sold-out comics, o
 and **Sort** by title, price or stock. Select all then applies to whatever you're looking at.
 
 **Orders** (staff area → **Orders**): every order is listed with its customer, items and notes. Open an order and mark it
-**ready**, **collected** (or **posted**), **paid**, or **cancelled**; each change is recorded with who made it. Filter by
-Open, Finished, Cancelled or All, and **Download as spreadsheet (CSV)** to keep your own records.
-Stock isn't reduced by orders, so adjust it under **Stock** as comics sell.
+**ready**, **collected** (or **posted**), **paid**, or **cancelled**; each change is recorded with who made it and the order's
+Discord post is updated to match. Finished orders move to the **Archive** and are deleted 14 days later.
+**Download as spreadsheet (CSV)** keeps your own records.
+
+Orders **take comics off the shelf automatically** (and cancelling puts them back), so stock stays right without anyone editing it.
+Publishing from an out-of-date screen is safe: your edits are merged with what orders have changed since.
+If the stock can't be updated (for example the GitHub token has expired) the order is still taken but flagged **Adjust stock**.
+
+Customers can use **Track order** in the menu with their order number and phone number to see where their order is.
 
 **By hand:** edit `data/products.json` on GitHub. One comic per line:
 
@@ -51,8 +57,8 @@ Opening hours, postage and the time zone used for the "Open now" badge are in `d
 ## Orders and payment
 
 Online ordering is on (`testMode: false` in `data/config.json`, `ORDERS_ENABLED = "true"` in `worker/wrangler.toml`).
-Every order is re-priced from the real catalog by the staff service, saved for 90 days (staff area → **Orders**),
-and logged to a Discord channel. Payment isn't online yet: orders are "payment pending" and the shop settles up with
+Every order is re-priced from the real catalog by the staff service, saved (staff area → **Orders**), and logged to a
+Discord channel. Payment isn't online yet: orders are "payment pending" and the shop settles up with
 the customer. Fleeca payment is a later step (`payOnline`). See `docs/DISCORD.md` to reconnect Discord or switch ordering off.
 
 Customers can share a shelf with a link: `/?shelf=DC+Comics&sort=price-asc`. Pressing <kbd>/</kbd> jumps to the search box.

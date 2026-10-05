@@ -120,6 +120,7 @@
 .pill-void{border-style:dashed;color:var(--ink-soft)}
 .orders-filter{display:flex;flex-wrap:wrap;gap:8px;padding:10px 0 12px;border-bottom:1px solid var(--rule)}
 .orders-filter .btn[aria-pressed="true"]{background:var(--yellow);color:var(--on-yellow);border-color:var(--ink-fixed)}
+.orders-note{flex-basis:100%;order:5;margin:2px 0 0!important}
 .list-pick{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
 .list-pick .admin-select{padding:6px 10px;font-size:14px}
 .list-tip{margin:8px 0 0}

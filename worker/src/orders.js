@@ -1,24 +1,30 @@
-/* Orders: validate what a customer sends, re-price it from the real catalog, keep a record,
-   and log it to a Discord channel through a webhook.
+/* Orders: validate what a customer sends, re-price it from the real catalog, take the comics off the shelf,
+   keep a record, and log it to a Discord channel through a webhook. Staff then work the order through
+   ready, collected or posted, paid, or cancelled, and the Discord post is edited to match.
 
    Nothing the browser says about prices or titles is trusted. It only names comics (by id) and quantities;
-   everything else is looked up from the published data/shop.json.
+   everything else is looked up from the published data/shop.json, and stock is checked against GitHub itself.
 
    Bindings used here (see docs/DISCORD.md):
      ORDERS_ENABLED       "true" to accept orders. Anything else keeps the public endpoint closed.
      DISCORD_WEBHOOK_URL  secret, the channel webhook. Without it orders are still stored, just not posted.
-     DISCORD_PING_ROLE    optional role id to ping on each new order
+     DISCORD_PING_ROLE    optional role id to ping on each new order and when one is ready
      SITE_URL             the public address of the shop, e.g. https://flickerscomics.github.io
-     USERS                the KV namespace (orders are kept for 90 days under "order:" keys) */
-import { bad } from "./http.js";
+     USERS                the KV namespace. Orders are kept 90 days; finished ones (collected, posted or
+                          cancelled) move to the archive and are deleted 14 days after they finish. */
+import { HttpError, bad } from "./http.js";
+import { adjustStock } from "./github.js";
 import { fullTitle, money, hoursText } from "../../src/shared.mjs";
 
 const ORDER_TTL = 90 * 24 * 3600;
+const ARCHIVE_TTL = 14 * 24 * 3600;
 const ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I, 32 symbols so the byte mapping is unbiased
-const MAX_LINES = 40, MAX_QTY = 99, ORDERS_PER_WINDOW = 5, WINDOW_SECONDS = 600;
+const ORDER_ID_RE = /^FC-[A-Z2-9]{6}$/;
+const MAX_LINES = 40, MAX_QTY = 99, ORDERS_PER_WINDOW = 5, LOOKUPS_PER_WINDOW = 12, WINDOW_SECONDS = 600;
 
 const clean = (v, max) => String(v ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").trim().slice(0, max);
 const siteBase = env => String(env.SITE_URL || "").replace(/\/+$/, "");
+const digitsOf = s => String(s || "").replace(/\D/g, "");
 
 export function newOrderId() {
   const bytes = crypto.getRandomValues(new Uint8Array(6));
@@ -35,6 +41,22 @@ export async function loadShop(env) {
   if (!res.ok) throw bad(503, "Couldn't check the shop's stock just now. Try again in a moment.");
   try { return await res.json(); } catch (e) { throw bad(503, "Couldn't check the shop's stock just now. Try again in a moment."); }
 }
+const shopConfig = async env => { try { return (await loadShop(env)).config || {}; } catch (e) { return {}; } };
+
+/* ---------- status ---------- */
+export const STATUSES = ["new", "ready", "done", "cancelled"];
+export const orderStatus = o => o.status || "new";
+export const statusName = o => ({ new: "New", ready: "Ready", done: o.method === "post" ? "Posted" : "Collected", cancelled: "Cancelled" })[orderStatus(o)] || "New";
+const isFinished = o => orderStatus(o) === "done" || orderStatus(o) === "cancelled";
+
+/* When an order will be deleted: 14 days after it finished, and never later than 90 days after it was placed. */
+function ttlSeconds(o) {
+  const since = iso => (Date.now() - Date.parse(iso)) / 1000;
+  let ttl = ORDER_TTL - since(o.placedAt);
+  if (o.completedAt) ttl = Math.min(ttl, ARCHIVE_TTL - since(o.completedAt));
+  return Math.max(60, Math.floor(ttl)); // Workers KV needs at least 60 seconds
+}
+const expired = o => !!o.completedAt && Date.now() - Date.parse(o.completedAt) > ARCHIVE_TTL * 1000;
 
 /* ---------- validating an order ---------- */
 function dateInRange(iso, daysAhead) {
@@ -52,7 +74,7 @@ export function buildOrder(raw, shop, { test = false } = {}) {
 
   const name = clean(raw.name, 80);
   if (name.length < 3) throw bad(400, "Enter your full name.");
-  const phone = clean(raw.phone, 30), digits = phone.replace(/\D/g, "");
+  const phone = clean(raw.phone, 30), digits = digitsOf(phone);
   if (/[^\d\s()+\-#]/.test(phone) || digits.length < 4 || digits.length > 15) throw bad(400, "Enter your phone number using digits only.");
   const method = raw.method === "post" ? "post" : raw.method === "collect" ? "collect" : null;
   if (!method) throw bad(400, "Choose collection or postage.");
@@ -93,8 +115,10 @@ export function buildOrder(raw, shop, { test = false } = {}) {
 /* ---------- Discord ---------- */
 const escMd = s => String(s).replace(/([\\*_~`|>])/g, "\\$1").replace(/</g, "\\<");
 const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+const STATUS_COLOR = { new: 0xFFE912, ready: 0x1EA7E1, done: 0x23A55A, cancelled: 0x949BA4 };
 
 export function orderEmbed(o, cfg = {}) {
+  const status = orderStatus(o), collect = o.method === "collect";
   const lines = o.items.map(i => `${i.qty} × ${escMd(i.title)} · ${money(i.price * i.qty)}`);
   let items = "";
   for (let i = 0; i < lines.length; i++) {
@@ -102,10 +126,17 @@ export function orderEmbed(o, cfg = {}) {
     if (next.length > 940) { items += `\n…and ${lines.length - i} more`; break; }
     items = next;
   }
+  const description = {
+    new: collect ? "New order to **collect** in store." : "New order to **post**.",
+    ready: collect ? "**Ready to collect** in store." : "**Packed**, ready to post.",
+    done: `**${statusName(o)}.**`,
+    cancelled: "**Cancelled.**"
+  }[status] || "";
   const fields = [
     { name: "Customer", value: cut(escMd(o.name), 200), inline: true },
     { name: "Phone", value: cut(escMd(o.phone), 100), inline: true },
-    o.method === "collect"
+    { name: "Payment", value: o.paid ? "Paid" : "Not paid yet", inline: true },
+    collect
       ? { name: "Collect on", value: `${o.collectDate}${cfg.openHour != null ? ", " + hoursText(cfg) : ""}` }
       : { name: "Post to", value: cut(escMd(o.address), 1000) },
     { name: "Items", value: items || "—" },
@@ -114,43 +145,65 @@ export function orderEmbed(o, cfg = {}) {
     { name: "Total", value: `**${money(o.total)}**`, inline: true }
   ];
   if (o.notes) fields.push({ name: "Notes", value: cut(escMd(o.notes), 1000) });
+  if (o.stock === "manual") fields.push({ name: "Stock", value: "Not updated automatically. Adjust it in the staff area." });
+  if (o.stock === "restore-failed") fields.push({ name: "Stock", value: "Cancelled, but the stock wasn't put back. Add the comics back in the staff area." });
   return {
-    title: `${o.test ? "TEST · " : ""}Order ${o.id} · ${money(o.total)}`,
-    description: o.method === "collect" ? "New order to **collect** in store." : "New order to **post**.",
-    color: o.test ? 0x949BA4 : 0xFFE912,
+    title: `${o.test ? "TEST · " : ""}Order ${o.id} · ${money(o.total)}${status === "new" ? "" : " · " + statusName(o).toUpperCase()}`,
+    description,
+    color: o.test ? 0x949BA4 : STATUS_COLOR[status],
     fields,
-    footer: { text: o.test ? "Test message, not a real order" : o.paid ? "Paid through Fleeca" : "Payment pending" },
+    footer: { text: o.test ? "Test message, not a real order" : o.paid ? "Paid" : "Payment pending" },
     timestamp: o.placedAt
   };
 }
 
-export async function postToDiscord(env, order, cfg) {
-  const url = String(env.DISCORD_WEBHOOK_URL || "").trim(); // a pasted secret can pick up a stray space or line break
-  if (!url) return { ok: false, reason: "not configured" };
-  const role = /^\d{5,25}$/.test(String(env.DISCORD_PING_ROLE || "")) ? String(env.DISCORD_PING_ROLE) : null;
-  const payload = {
-    username: "Flickers Orders",
-    ...(siteBase(env) ? { avatar_url: `${siteBase(env)}/assets/apple-touch-icon.png` } : {}),
-    content: role && !order.test ? `<@&${role}> new order` : undefined,
-    embeds: [orderEmbed(order, cfg)],
-    // Customers type some of this text, so nothing in the message is ever allowed to ping anyone except the one role we choose.
-    allowed_mentions: { parse: [], roles: role && !order.test ? [role] : [] }
-  };
+/* One call to the webhook, with a single retry if Discord says slow down. The URL is a secret: never logged, never returned. */
+async function webhook(env, { method = "POST", messageId, wait = false, payload }) {
+  const raw = String(env.DISCORD_WEBHOOK_URL || "").trim(); // a pasted secret can pick up a stray space or line break
+  if (!raw) return { ok: false, reason: "not configured" };
+  let url;
+  try { url = new URL(raw); } catch (e) { return { ok: false, reason: "the webhook address isn't valid" }; }
+  if (messageId) url.pathname = url.pathname.replace(/\/+$/, "") + "/messages/" + encodeURIComponent(messageId);
+  if (wait) url.searchParams.set("wait", "true");
   for (let attempt = 0; attempt < 2; attempt++) {
     let res;
-    try { res = await fetch(url + (url.includes("?") ? "&" : "?") + "wait=true", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); }
+    try { res = await fetch(url.toString(), { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); }
     catch (e) { console.error("Discord unreachable"); continue; }
-    if (res.ok) return { ok: true };
+    if (res.ok) { let data = {}; try { data = await res.json(); } catch (e) { /* no body */ } return { ok: true, id: data && data.id }; }
     if (res.status === 429) {
       let wait = 1;
       try { wait = Math.min(3, Number((await res.json()).retry_after) || 1); } catch (e) { /* default */ }
       await new Promise(r => setTimeout(r, wait * 1000));
       continue;
     }
-    console.error("Discord answered", res.status); // the status only: the webhook URL is a secret and is never logged
+    console.error("Discord answered", res.status); // the status only
     return { ok: false, reason: `Discord answered ${res.status}` };
   }
   return { ok: false, reason: "Discord didn't answer" };
+}
+const pingRole = env => (/^\d{5,25}$/.test(String(env.DISCORD_PING_ROLE || "")) ? String(env.DISCORD_PING_ROLE) : null);
+
+export async function postToDiscord(env, order, cfg) {
+  const role = pingRole(env);
+  return webhook(env, {
+    wait: true,
+    payload: {
+      username: "Flickers Orders",
+      ...(siteBase(env) ? { avatar_url: `${siteBase(env)}/assets/apple-touch-icon.png` } : {}),
+      content: role && !order.test ? `<@&${role}> new order` : undefined,
+      embeds: [orderEmbed(order, cfg)],
+      // Customers type some of this text, so nothing in the message is ever allowed to ping anyone except the one role we choose.
+      allowed_mentions: { parse: [], roles: role && !order.test ? [role] : [] }
+    }
+  });
+}
+/* Rewrites the order's original Discord post (status, payment, colour) after staff change it. */
+const editDiscord = (env, order, cfg) => webhook(env, { method: "PATCH", messageId: order.discordId, payload: { embeds: [orderEmbed(order, cfg)], allowed_mentions: { parse: [] } } });
+/* A short follow-up message, used when an order is ready, so staff are nudged to contact the customer. */
+function announceReady(env, o) {
+  const role = pingRole(env), who = `${escMd(o.name)} on ${escMd(o.phone)}`;
+  const text = o.method === "collect" ? `Order ${o.id} is ready to collect. Let ${who} know.` : `Order ${o.id} is packed and ready to post. Let ${who} know it's on its way.`;
+  return webhook(env, { payload: { username: "Flickers Orders", content: (role ? `<@&${role}> ` : "") + text, allowed_mentions: { parse: [], roles: role ? [role] : [] } } });
 }
 
 /* ---------- storing and listing ---------- */
@@ -166,13 +219,26 @@ export async function placeOrder(env, raw, ip) {
   const shop = await loadShop(env);
   const order = buildOrder(raw, shop);
   for (let tries = 0; tries < 5 && await env.USERS.get(`oid:${order.id}`); tries++) order.id = newOrderId();
-  await env.USERS.put(`oid:${order.id}`, "1", { expirationTtl: ORDER_TTL });
 
-  const record = { ...order, discord: "pending" };
-  await env.USERS.put(orderKey(order), JSON.stringify(record), { expirationTtl: ORDER_TTL }); // saved before Discord is tried
-  const sent = await postToDiscord(env, order, shop.config);
+  // Take the comics off the shelf. This checks the real stock in GitHub, so two customers can't both get the last copy.
+  // If GitHub can't be reached (say the Worker's token has expired) the order is still accepted and flagged for staff to adjust by hand.
+  order.stock = "manual";
+  try {
+    await adjustStock(env, order.items.map(i => [i.id, -i.qty]), `Order ${order.id}: ${order.items.reduce((s, i) => s + i.qty, 0)} comic${order.items.reduce((s, i) => s + i.qty, 0) === 1 ? "" : "s"} taken off the shelf`);
+    order.stock = "held";
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 409) throw e; // really out of stock
+    console.error("Couldn't update the stock for an order");
+  }
+
+  const key = orderKey(order);
+  await env.USERS.put(`oid:${order.id}`, key, { expirationTtl: ORDER_TTL }); // also how an order is found again
+  const record = { ...order, status: "new", discord: "pending" };
+  await env.USERS.put(key, JSON.stringify(record), { expirationTtl: ORDER_TTL }); // saved before Discord is tried
+  const sent = await postToDiscord(env, record, shop.config);
   record.discord = sent.ok ? "sent" : `failed: ${sent.reason}`;
-  await env.USERS.put(orderKey(order), JSON.stringify(record), { expirationTtl: ORDER_TTL });
+  if (sent.id) record.discordId = sent.id;
+  await env.USERS.put(key, JSON.stringify(record), { expirationTtl: ORDER_TTL });
   return { orderId: order.id, subtotal: order.subtotal, postage: order.postage, total: order.total, paid: false };
 }
 
@@ -180,21 +246,17 @@ export async function listOrders(env) {
   const out = [];
   let cursor;
   do {
-    const page = await env.USERS.list({ prefix: "order:", cursor, limit: 100 - out.length });
-    for (const k of page.keys) { const raw = await env.USERS.get(k.name); if (raw) out.push(JSON.parse(raw)); }
-    cursor = page.list_complete || out.length >= 100 ? undefined : page.cursor;
+    const page = await env.USERS.list({ prefix: "order:", cursor, limit: 100 });
+    for (const k of page.keys) { const raw = await env.USERS.get(k.name); if (raw) { const o = JSON.parse(raw); if (!expired(o)) out.push(o); } }
+    cursor = page.list_complete || out.length >= 200 ? undefined : page.cursor;
   } while (cursor);
-  return out.slice(0, 100);
+  return out.slice(0, 200);
 }
 
-/* ---------- working through an order ----------
-   new → ready → done (collected or posted), or cancelled at any point; "paid" is tracked separately because
-   until Fleeca is connected the shop and customer settle payment themselves. Every change is kept in the
-   order's history so staff can see who did what. */
-export const STATUSES = ["new", "ready", "done", "cancelled"];
-
 async function findOrderKey(env, id) {
-  let cursor;
+  const direct = await env.USERS.get(`oid:${id}`);
+  if (direct && direct.startsWith("order:")) return direct;
+  let cursor; // orders placed before the key was recorded
   do {
     const page = await env.USERS.list({ prefix: "order:", cursor });
     const hit = page.keys.find(k => k.name.endsWith(":" + id));
@@ -204,27 +266,70 @@ async function findOrderKey(env, id) {
   return null;
 }
 
+/* ---------- customers checking on their order ---------- */
+export async function lookupOrder(env, raw, ip) {
+  if (!raw || typeof raw !== "object") throw bad(400, "Enter your order number and phone number.");
+  const id = clean(raw.id, 20).toUpperCase().replace(/\s+/g, ""), digits = digitsOf(raw.phone);
+  if (!ORDER_ID_RE.test(id)) throw bad(400, "Enter your order number, like FC-7K3PQ2.");
+  if (digits.length < 4) throw bad(400, "Enter the phone number you gave when you ordered.");
+  const rlKey = `rl:lookup:${ip}`, n = Number(await env.USERS.get(rlKey)) || 0;
+  if (n >= LOOKUPS_PER_WINDOW) throw bad(429, "That's a lot of lookups from your connection. Wait a few minutes and try again.");
+  await env.USERS.put(rlKey, String(n + 1), { expirationTtl: WINDOW_SECONDS });
+
+  const key = await findOrderKey(env, id), stored = key && await env.USERS.get(key);
+  const o = stored && JSON.parse(stored);
+  const same = o && !expired(o) && digitsOf(o.phone) === digits;
+  if (!same) throw bad(404, "We couldn't find an order with that number and phone number. Check them and try again."); // the same answer whether the number or the phone is wrong
+  return {
+    id: o.id, state: orderStatus(o), statusLabel: statusName(o), method: o.method, collectDate: o.collectDate || null, paid: !!o.paid,
+    total: o.total, postage: o.postage, placedAt: o.placedAt, items: o.items.map(i => ({ title: i.title, qty: i.qty }))
+  };
+}
+
+/* ---------- working through an order ----------
+   new → ready → done (collected or posted), or cancelled at any point; "paid" is tracked separately because
+   until Fleeca is connected the shop and customer settle payment themselves. Every change is kept in the
+   order's history so staff can see who did what. Cancelling puts the comics back on the shelf; reopening takes them off again.
+   Finished orders (done or cancelled) form the archive and are deleted 14 days after they finished. */
 export async function updateOrder(env, id, patch, user) {
-  if (!/^FC-[A-Z2-9]{6}$/.test(String(id))) throw bad(400, "That isn't an order number.");
+  if (!ORDER_ID_RE.test(String(id))) throw bad(400, "That isn't an order number.");
   if (!patch || typeof patch !== "object") throw bad(400, "Nothing to change.");
   const key = await findOrderKey(env, id), raw = key && await env.USERS.get(key);
-  if (!raw) throw bad(404, "That order wasn't found. Orders are kept for 90 days.");
-  const o = JSON.parse(raw), changes = [];
+  if (!raw) throw bad(404, "That order wasn't found. Finished orders are deleted after 14 days.");
+  const o = JSON.parse(raw), prev = orderStatus(o);
 
-  if (patch.status !== undefined) {
-    if (!STATUSES.includes(patch.status)) throw bad(400, "That isn't a valid status.");
-    if (patch.status !== (o.status || "new")) { o.status = patch.status; changes.push(patch.status); }
+  if (patch.status !== undefined && !STATUSES.includes(patch.status)) throw bad(400, "That isn't a valid status.");
+  if (patch.paid !== undefined && typeof patch.paid !== "boolean") throw bad(400, "Paid must be yes or no.");
+  const next = patch.status !== undefined ? patch.status : prev;
+  const statusChanged = next !== prev, paidChanged = patch.paid !== undefined && patch.paid !== !!o.paid;
+  if (!statusChanged && !paidChanged) return { order: o, warnings: [] };
+
+  const warnings = [], changes = [], lines = o.items.map(i => [i.id, i.qty]);
+  if (statusChanged) {
+    if (next === "cancelled" && o.stock === "held") {
+      try { await adjustStock(env, lines, `Order ${o.id} cancelled: comics put back on the shelf`); o.stock = "released"; }
+      catch (e) { o.stock = "restore-failed"; warnings.push("The order was cancelled, but the comics couldn't be put back in stock automatically. Add them back under Stock."); }
+    } else if (prev === "cancelled" && next !== "cancelled" && o.stock === "released") {
+      try { await adjustStock(env, lines.map(([i, q]) => [i, -q]), `Order ${o.id} reopened: comics taken off the shelf again`); o.stock = "held"; }
+      catch (e) {
+        if (e instanceof HttpError && e.status === 409) throw bad(409, `Can't reopen this order: ${e.message}`);
+        throw bad(502, "Couldn't take the comics off the shelf again just now. Try again in a moment.");
+      }
+    }
+    o.status = next; changes.push(next);
+    if (isFinished(o)) o.completedAt = new Date().toISOString(); else delete o.completedAt;
   }
-  if (patch.paid !== undefined) {
-    if (typeof patch.paid !== "boolean") throw bad(400, "Paid must be yes or no.");
-    if (patch.paid !== !!o.paid) { o.paid = patch.paid; changes.push(patch.paid ? "paid" : "unpaid"); }
-  }
-  if (!changes.length) return { order: o };
+  if (paidChanged) { o.paid = patch.paid; changes.push(patch.paid ? "paid" : "unpaid"); }
 
   o.history = [...(o.history || []), ...changes.map(change => ({ at: new Date().toISOString(), by: user.username, change }))].slice(-30);
-  const left = Math.max(60, ORDER_TTL - Math.floor((Date.now() - Date.parse(o.placedAt)) / 1000)); // keep the original 90-day clock
-  await env.USERS.put(key, JSON.stringify(o), { expirationTtl: left });
-  return { order: o };
+  await env.USERS.put(key, JSON.stringify(o), { expirationTtl: ttlSeconds(o) });
+
+  // keep the Discord post in step, and nudge staff when an order is ready
+  let discord = "skipped";
+  const cfg = await shopConfig(env);
+  if (o.discordId) discord = (await editDiscord(env, o, cfg)).ok ? "updated" : "failed";
+  if (statusChanged && next === "ready") await announceReady(env, o);
+  return { order: o, warnings, discord };
 }
 
 /* A sample message so staff can check the channel is connected. Not stored, not a real order. */

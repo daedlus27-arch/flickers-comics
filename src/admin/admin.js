@@ -205,7 +205,11 @@ function renderShell() {
   <dialog class="editor" id="editDlg" aria-labelledby="edTitle"></dialog>
   <dialog class="prompt" id="bulkDlg" aria-labelledby="bulkTitle"></dialog>`;
   $("signOut").addEventListener("click", askSignOut);
-  app.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { S.tab = b.dataset.tab; renderShell(); }));
+  app.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", async () => {
+    S.tab = b.dataset.tab;
+    if (S.tab === "stock" && S.draft.length && changeList().count === 0) { try { await loadStock(); } catch (e) { /* show what we already have */ } } // pick up stock that orders have used
+    renderShell();
+  }));
   $("editDlg").addEventListener("click", ev => { if (ev.target === $("editDlg")) $("editDlg").close(); });
   if (S.tab === "stock") renderStock();
   else if (S.tab === "orders") renderOrders();
@@ -227,6 +231,7 @@ function renderStock() {
       <div class="admin-publish">
         <span class="admin-changes" id="aChanges">No unpublished changes</span>
         <button type="button" class="link-btn" id="aDiscard" hidden>Discard</button>
+        <button type="button" class="link-btn" id="aRefresh">Refresh stock</button>
         <button type="button" class="btn btn-yellow btn-small" id="aPublish" disabled>Publish changes</button>
       </div>
     </div>
@@ -294,6 +299,9 @@ function renderStock() {
     { label: "Keep them", fn: () => say("") }
   ]));
   $("aPublish").addEventListener("click", publish);
+  $("aRefresh").addEventListener("click", async () => {
+    try { await loadStock(); renderList(); say("Stock refreshed. Orders take comics off the shelf automatically.", "ok"); } catch (e) { say(e.message, "error"); }
+  });
   renderList();
 }
 function updateCounts() {
@@ -303,6 +311,7 @@ function updateCounts() {
   $("aChanges").classList.toggle("has", c.count > 0);
   $("aPublish").disabled = c.count === 0 || S.busy;
   $("aDiscard").hidden = c.count === 0;
+  if ($("aRefresh")) $("aRefresh").hidden = c.count > 0; // refreshing would throw away unpublished edits
   return c;
 }
 function rowPills(p, c) {
@@ -653,12 +662,14 @@ async function publish() {
     const used = new Set(products.map(p => p.image).filter(Boolean));
     const uploads = {};
     Object.keys(S.uploads).forEach(path => { if (used.has(path)) uploads[path] = S.uploads[path]; });
-    const r = await api("/publish", { method: "POST", body: { version: S.version, products, featured: S.draftFeat.slice(0, 3), uploads } });
+    const r = await api("/publish", { method: "POST", body: { version: S.version, base: S.orig.map(cleanProduct), products, featured: S.draftFeat.slice(0, 3), uploads } });
     S.version = r.version;
-    S.orig = clone(S.draft); S.origFeat = S.draftFeat.slice(); S.uploads = {};
+    if (r.merged) { S.draft = clone(r.products); S.orig = clone(r.products); } // orders took stock off the shelf since this was loaded
+    else S.orig = clone(S.draft);
+    S.origFeat = S.draftFeat.slice(); S.uploads = {};
     S.busy = false;
     if ($("aList")) renderList();
-    say("Published. The shop updates in a minute or two, once the site has rebuilt.", "ok");
+    say(r.merged ? "Published. New orders had changed some stock since you loaded it, so those numbers are updated on screen. The shop updates in a minute or two." : "Published. The shop updates in a minute or two, once the site has rebuilt.", "ok");
   } catch (e) {
     S.busy = false; updateCounts();
     const actions = e.status === 409 ? [{ label: "Reload stock", danger: true, fn: async () => { try { await loadStock(); renderList(); say("Stock reloaded.", "ok"); } catch (err) { say(err.message, "error"); } } }] : [];
@@ -673,10 +684,16 @@ const STATUS_NAME = o => ({ new: "New", ready: "Ready", done: o.method === "post
 const HISTORY_NAME = (change, o) => ({ new: "Reopened", ready: "Marked ready", done: o.method === "post" ? "Marked posted" : "Marked collected", cancelled: "Cancelled", paid: "Marked paid", unpaid: "Marked unpaid" })[change] || change;
 const ORDER_FILTERS = [
   ["open", "Open", o => orderStatus(o) === "new" || orderStatus(o) === "ready"],
-  ["done", "Finished", o => orderStatus(o) === "done"],
-  ["cancelled", "Cancelled", o => orderStatus(o) === "cancelled"],
-  ["all", "All", () => true]
+  ["archive", "Archive", o => orderStatus(o) === "done" || orderStatus(o) === "cancelled"]
 ];
+const ARCHIVE_DAYS = 14;
+const archiveEnd = o => new Date(Date.parse(o.completedAt) + ARCHIVE_DAYS * 86400000).toISOString();
+const STOCK_NOTE = {
+  held: "Taken off the shelf automatically",
+  released: "Put back on the shelf automatically",
+  manual: "Not adjusted automatically (GitHub couldn't be reached). Change it under Stock.",
+  "restore-failed": "Cancelled, but not put back. Add the comics back under Stock."
+};
 const orderWhen = iso => new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 
 /* A spreadsheet opens a cell that starts with = + - or @ as a formula, so typed text like that is defused with a leading quote. */
@@ -710,13 +727,15 @@ function orderHTML(o, isOpen) {
   const history = [`Placed by the customer · ${orderWhen(o.placedAt)}`, ...(o.history || []).map(h => `${HISTORY_NAME(h.change, o)} by ${h.by} · ${orderWhen(h.at)}`)];
   const pillClass = { new: "pill-edit", ready: "pill-added", done: "", cancelled: "pill-void" }[s];
   return `<details class="order${s === "cancelled" ? " is-cancelled" : ""}" data-order="${esc(o.id)}"${isOpen ? " open" : ""}>
-    <summary><b>${esc(o.id)}</b> <span>${esc(orderWhen(o.placedAt))}</span> <span>${esc(o.name)}</span> <span class="pill">${o.method === "post" ? "Post" : "Collect"}</span> <span class="pill ${pillClass}">${esc(STATUS_NAME(o))}</span>${o.paid ? ' <span class="pill pill-added">Paid</span>' : ""}${/^failed/.test(o.discord || "") ? ' <span class="pill pill-edit">Not posted to Discord</span>' : ""} <b class="order-total">${money(o.total)}</b></summary>
+    <summary><b>${esc(o.id)}</b> <span>${esc(orderWhen(o.placedAt))}</span> <span>${esc(o.name)}</span> <span class="pill">${o.method === "post" ? "Post" : "Collect"}</span> <span class="pill ${pillClass}">${esc(STATUS_NAME(o))}</span>${o.paid ? ' <span class="pill pill-added">Paid</span>' : ""}${o.stock === "manual" || o.stock === "restore-failed" ? ' <span class="pill pill-edit">Adjust stock</span>' : ""}${/^failed/.test(o.discord || "") ? ' <span class="pill pill-edit">Not posted to Discord</span>' : ""} <b class="order-total">${money(o.total)}</b></summary>
     <dl class="done-dl">
       <dt>Phone</dt><dd>${esc(o.phone)}</dd>
       ${o.method === "collect" ? `<dt>Collect on</dt><dd>${esc(o.collectDate)}</dd>` : `<dt>Post to</dt><dd>${escLines(o.address)}</dd>`}
       <dt>Items</dt><dd>${o.items.map(i => `${i.qty} × ${esc(i.title)} · ${money(i.price * i.qty)}`).join("<br>")}</dd>
       <dt>Total</dt><dd>${money(o.total)}${o.postage ? ` (incl. ${money(o.postage)} postage)` : ""}</dd>
       <dt>Payment</dt><dd>${o.paid ? "Paid" : "Not paid yet"}</dd>
+      ${STOCK_NOTE[o.stock] ? `<dt>Stock</dt><dd>${STOCK_NOTE[o.stock]}</dd>` : ""}
+      ${o.completedAt ? `<dt>Kept until</dt><dd>${esc(orderWhen(archiveEnd(o)))}, then deleted</dd>` : ""}
       ${o.notes ? `<dt>Notes</dt><dd>${escLines(o.notes)}</dd>` : ""}
       <dt>History</dt><dd>${history.map(esc).join("<br>")}</dd>
       <dt>Discord</dt><dd>${esc(o.discord || "")}</dd>
@@ -733,7 +752,7 @@ async function renderOrders() {
   let data;
   try { data = await api("/orders"); } catch (e) { say(e.message, "error"); return; }
   const orders = data.orders, open = new Set();
-  let filter = orders.some(ORDER_FILTERS[0][2]) ? "open" : "all";
+  let filter = "open";
 
   $("ordersTop").innerHTML = `<div class="orders-status">
       <span class="pill ${data.ordersOpen ? "pill-added" : ""}">Online ordering: ${data.ordersOpen ? "ON" : "OFF"}</span>
@@ -741,7 +760,7 @@ async function renderOrders() {
       <button type="button" class="btn btn-small" id="dcTest"${data.discord ? "" : " disabled"}>Send a test message to Discord</button>
       <button type="button" class="btn btn-small" id="csvBtn"${orders.length ? "" : " disabled"}>Download as spreadsheet (CSV)</button>
     </div>
-    <p class="hint">Every order is saved here for 90 days and posted to the Discord channel. Stock isn't reduced by orders, so adjust it under Stock as comics sell. ${data.ordersOpen ? "" : "Customers can't order online yet, so this list stays empty until ordering is switched on."}</p>`;
+    <p class="hint">Every order is posted to the Discord channel, and the post is updated as you work the order. Orders take comics off the shelf automatically, and cancelling puts them back. Finished orders (collected, posted or cancelled) move to the Archive and are deleted after 14 days. ${data.ordersOpen ? "" : "Customers can't order online yet, so this list stays empty until ordering is switched on."}</p>`;
   $("dcTest").addEventListener("click", async () => {
     $("dcTest").disabled = true;
     try { await api("/orders/test", { method: "POST" }); say("Sent. Check the Discord channel for a message marked TEST.", "ok"); }
@@ -751,10 +770,11 @@ async function renderOrders() {
   $("csvBtn").addEventListener("click", () => download(`flickers-orders-${new Date().toISOString().slice(0, 10)}.csv`, ordersCsv(orders), "text/csv;charset=utf-8"));
 
   const paint = () => {
-    $("ordersFilter").innerHTML = ORDER_FILTERS.map(([k, name, fn]) => `<button type="button" class="btn btn-small" data-filter="${k}" aria-pressed="${filter === k}">${name} (${orders.filter(fn).length})</button>`).join("");
+    $("ordersFilter").innerHTML = (filter === "archive" ? '<p class="hint orders-note">Finished orders are kept here for two weeks, then deleted for good. Reopen one to move it back to Open.</p>' : "") + ORDER_FILTERS.map(([k, name, fn]) => `<button type="button" class="btn btn-small" data-filter="${k}" aria-pressed="${filter === k}">${name} (${orders.filter(fn).length})</button>`).join("");
     const list = orders.filter(ORDER_FILTERS.find(f => f[0] === filter)[2]);
+    if (filter === "archive") list.sort((a, b) => Date.parse(b.completedAt || 0) - Date.parse(a.completedAt || 0));
     $("ordersList").innerHTML = list.length ? list.map(o => orderHTML(o, open.has(o.id))).join("")
-      : `<p class="admin-empty">${orders.length ? "No orders in this view." : "No orders yet."}</p>`;
+      : `<p class="admin-empty">${filter === "open" ? "No open orders." : "Nothing in the archive."}</p>`;
   };
   $("ordersFilter").addEventListener("click", ev => {
     const b = ev.target.closest("[data-filter]"); if (!b) return;
@@ -771,13 +791,15 @@ async function renderOrders() {
       try {
         const r = await api(`/orders/${encodeURIComponent(id)}`, { method: "POST", body });
         Object.assign(o, r.order);
-        say(`${id}: ${body.status ? STATUS_NAME(o) : o.paid ? "marked paid" : "marked unpaid"}.`, "ok");
+        const what = body.status ? STATUS_NAME(o) + (body.status === "cancelled" || body.status === "done" ? " (moved to the Archive)" : "") : o.paid ? "marked paid" : "marked unpaid";
+        const extra = [...(r.warnings || []), ...(r.discord === "failed" ? ["The Discord post couldn't be updated."] : [])];
+        say(`${id}: ${what}.${extra.length ? " " + extra.join(" ") : ""}`, extra.length ? "error" : "ok");
         paint();
         const summary = $("ordersList").querySelector(`[data-order="${id}"] summary`); // keep the keyboard where it was
         if (summary) summary.focus(); else $("ordersFilter").querySelector(`[data-filter="${filter}"]`).focus();
       } catch (e) { b.disabled = false; say(e.message, "error"); }
     };
-    if (body.status === "cancelled") say(`Cancel order ${id} for ${o.name}? It stays in the list as cancelled.`, "error", [{ label: "Cancel order", danger: true, fn: go }, { label: "Keep order", fn: () => say("") }]);
+    if (body.status === "cancelled") say(`Cancel order ${id} for ${o.name}? ${o.stock === "held" ? "The comics go back on the shelf. " : ""}It moves to the Archive for two weeks.`, "error", [{ label: "Cancel order", danger: true, fn: go }, { label: "Keep order", fn: () => say("") }]);
     else go();
   });
   paint();

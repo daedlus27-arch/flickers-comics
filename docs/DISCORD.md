@@ -6,7 +6,11 @@ Every order is posted to a Discord channel you choose, as a message like this:
 > New order to **collect** in store.
 > Customer, phone, collection day (or postal address), the comics and quantities, totals, notes.
 
-Orders are also saved for 90 days and listed in the staff area under **Orders**, so nothing is lost if Discord
+The post is **edited as staff work the order**: its title, colour and payment line change as it goes New, Ready,
+Collected (or Posted) or Cancelled and Paid. When an order is marked **Ready**, a short follow-up message is also posted
+(pinging the staff role if you've set one) so someone remembers to contact the customer.
+
+Orders are also saved and listed in the staff area under **Orders**, so nothing is lost if Discord
 has a bad day. The message is sent by a **webhook**: a private address that lets the shop post into one channel.
 No bot needs hosting or keeping online.
 
@@ -66,9 +70,21 @@ the payment link built into the Worker).
 
 ## Good to know
 
-- **Stock isn't reduced automatically.** Orders are logged for you to fulfil. Adjust stock in the staff area as comics sell.
+- **Stock goes down automatically.** When an order is placed, the Worker takes those comics off the shelf by committing to
+  `data/products.json` (the commit message names the order number only, never the customer). The check uses the real stock in
+  GitHub, so two customers can't both buy the last copy. **Cancelling an order puts the comics back**; reopening a cancelled
+  order takes them off again (and is refused if they've since sold out). The public site catches up when it rebuilds, a minute or two later.
+- **If the GitHub token expires** (or GitHub is down), orders are still accepted so you don't lose sales, but they're flagged
+  "Adjust stock" in the staff area and on the Discord post, and you change the stock by hand under **Stock**.
+- **Publishing while orders arrive is safe.** If an order changed the stock after you loaded it, your edits are merged onto the
+  latest stock instead of overwriting it.
 - **Working through orders:** in the staff area's **Orders** tab, mark an order ready, collected or posted, paid, or cancelled.
-  These changes are kept in the order's history (who and when) but aren't posted to Discord; the channel stays a plain log of new orders.
-- **Customer details are stored** (name, phone, address) for 90 days for the order log. Delete a Discord message by hand if you want it gone there.
+  Each change is kept in the order's history (who and when) and updates the Discord post.
+- **The Archive:** finished orders (collected, posted or cancelled) move from **Open** to **Archive** and are **deleted 14 days
+  after they finished**. Reopen one to move it back. Open orders are kept for up to 90 days.
+- **Customers can track an order** from the *Track order* link in the site's menu, with the order number and the phone number
+  they gave. They see its stage (Received, Ready, Collected or Posted), the items, total and payment, nothing else.
+  A link like `/?track=FC-7K3PQ2` opens the form with the number filled in. Lookups are limited to 12 per 10 minutes per connection.
+- **Customer details are stored** (name, phone, address) while the order is kept. Delete a Discord message by hand if you want it gone there.
 - **Trying it locally without Discord:** `npm run dev:api` prints each order's Discord message in the terminal instead of sending it.
   Build the site with `ORDERS_LIVE=1 ORDER_API=http://localhost:8787/orders ADMIN_API=http://localhost:8787 npm run build`, then `npm run serve`.

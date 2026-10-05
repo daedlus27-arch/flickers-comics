@@ -61,7 +61,7 @@ export function header(root, { logo = "assets/flickers-logo.png" } = {}) {
   <div class="wrap header-in">
     <a class="logo-link" href="${root || "./"}"><img class="logo" src="${root}${logo}" alt="Flickers Comics" width="640" height="104"></a>
     <div class="header-actions">
-      <nav class="nav" aria-label="Main"><a href="${root}#shop">Shop</a><a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a></nav>
+      <nav class="nav" aria-label="Main"><a href="${root}#shop">Shop</a><a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>
       <button type="button" class="cart-btn" id="cartBtn" aria-haspopup="dialog">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>
         <span class="cart-word">Cart</span>
@@ -71,7 +71,7 @@ export function header(root, { logo = "assets/flickers-logo.png" } = {}) {
     </div>
   </div>
 </header>
-<nav class="subnav" aria-label="Main (small screens)"><a href="${root}#shop">Shop</a><a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a></nav>`;
+<nav class="subnav" aria-label="Main (small screens)"><a href="${root}#shop">Shop</a><a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>`;
 }
 
 export function footer(root, cfg) {
@@ -80,7 +80,7 @@ export function footer(root, cfg) {
     <img class="footer-logo" src="${root}assets/flickers-logo.png" alt="Flickers Comics" width="640" height="104" loading="lazy">
     <div class="footer-cols">
       <div><h2>Hours</h2><p>Every day, ${hoursText(cfg)}</p></div>
-      <div><h2>Orders</h2><p>Collect in store: free<br>Postage: ${money(cfg.postage)}</p></div>
+      <div><h2>Orders</h2><p>Collect in store: free<br>Postage: ${money(cfg.postage)}</p><p class="footer-track"><button type="button" class="link-btn" data-track hidden>Track an order</button></p></div>
       <div><h2>Payment</h2><p>${cfg.payOnline ? "Pay from your bank account<br>through Fleeca" : "Online payment through<br>Fleeca is coming soon"}</p></div>
     </div>
     <p class="fine">© Flickers Comics. All prices in dollars. <a class="footer-link" href="${root}admin/">Staff login</a></p>
@@ -179,6 +179,25 @@ export function dialogs(cfg) {
     </form>
   </div>
   <div id="coDoneView" hidden></div>
+</dialog>
+
+<dialog class="checkout track" id="track" aria-labelledby="trackTitle">
+  <div class="co-head">
+    <h2 class="dialog-title" id="trackTitle">Track your order</h2>
+    <button type="button" class="icon-btn on-dark" data-close aria-label="Close order tracking">${X}</button>
+  </div>
+  <div class="track-body">
+    <form id="trackForm" novalidate>
+      <p class="hint track-intro">Enter the order number from your confirmation and the phone number you gave when you ordered.</p>
+      <div class="two">
+        <div class="field"><label for="t-id">Order number</label><input type="text" id="t-id" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. FC-7K3PQ2"></div>
+        <div class="field"><label for="t-phone">Phone number</label><input type="text" id="t-phone" inputmode="tel" autocomplete="tel" placeholder="e.g. 5550142"></div>
+      </div>
+      <p class="form-error" id="trackError" role="alert"></p>
+      <button type="submit" class="btn btn-yellow" id="trackBtn">Check my order</button>
+    </form>
+    <div id="trackResult" hidden></div>
+  </div>
 </dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>`;
