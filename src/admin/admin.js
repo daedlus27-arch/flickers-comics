@@ -55,6 +55,7 @@ async function startApp() {
 
 /* Every tab except Stock is fetched the first time it's opened, so signing in loads only what the first screen needs. */
 const LAZY = {
+  reorder: () => import("./reorder.js").then(m => m.renderReorder),
   orders: () => import("./orders.js").then(m => m.renderOrders),
   wanted: () => import("./wanted.js").then(m => m.renderWanted),
   sales: () => import("./sales.js").then(m => m.renderSales),
@@ -71,7 +72,7 @@ async function openLazyTab(key) {
   }
 }
 const OWNER_ONLY = ["sales", "staff"];
-const TABS = [["stock", "Stock"], ["orders", "Orders"], ["wanted", "Wanted"], ["sales", "Sales"], ["staff", "Staff"], ["account", "My password"]];
+const TABS = [["stock", "Stock"], ["reorder", "Reorder"], ["orders", "Orders"], ["wanted", "Wanted"], ["sales", "Sales"], ["staff", "Staff"], ["account", "Password"]];
 async function showTab(key) {
   S.tab = key;
   if (S.tab === "stock" && S.draft.length && changeList().count === 0) { try { await loadStock(); } catch (e) { /* show what we already have */ } } // pick up stock that orders have used
@@ -93,6 +94,7 @@ function renderShell() {
   <dialog class="prompt" id="bulkDlg" aria-labelledby="bulkTitle"></dialog>`;
   $("signOut").addEventListener("click", askSignOut);
   const tabs = [...app.querySelectorAll("[data-tab]")];
+  $("tab-" + S.tab)?.scrollIntoView({ inline: "center", block: "nearest" }); // on a phone the tab strip scrolls sideways: keep the open tab in view
   tabs.forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
   $("panel").previousElementSibling.addEventListener("keydown", async ev => { // arrow keys move between tabs, as screen reader users expect from a tab list
     const at = tabs.indexOf(document.activeElement), step = { ArrowRight: 1, ArrowLeft: -1 }[ev.key];

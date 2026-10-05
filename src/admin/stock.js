@@ -59,6 +59,7 @@ export function renderStock() {
     <div class="admin-bar">
       <label class="search"><span class="sr-only">Search stock</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" id="aQ" placeholder="Search stock" autocomplete="off"></label>
       <button type="button" class="btn btn-small" id="aAdd">+ Add item</button>
+      <button type="button" class="btn btn-small" id="aReceive">Receive shipment</button>
       <div class="admin-publish">
         <span class="admin-changes" id="aChanges">No unpublished changes</span>
         <button type="button" class="link-btn" id="aDiscard" hidden>Discard</button>
@@ -125,6 +126,23 @@ export function renderStock() {
     const b = ev.target.closest("[data-edit]"); if (b) openEditor(b.dataset.edit);
   });
   $("aAdd").addEventListener("click", () => openEditor(null));
+  $("aReceive").addEventListener("click", async () => {
+    if (changeList().count === 0) { try { await loadStock(); renderList(); } catch (e) { /* use what's on screen */ } } // start from the latest numbers (orders may have used some)
+    const { openReceive } = await import("./receive.js");
+    openReceive({
+      products: S.draft,
+      onApply: ({ lines, markNew }) => {
+        let comics = 0, copies = 0;
+        for (const [id, qty] of lines) {
+          const p = S.draft.find(x => x.id === id); if (!p) continue;
+          p.stock += qty; comics++; copies += qty;
+          if (markNew && !(p.badges || []).includes("new")) p.badges = [...(p.badges || []), "new"];
+        }
+        renderList();
+        say(`Added ${copies} cop${copies === 1 ? "y" : "ies"} to ${comics} comic${comics === 1 ? "" : "s"}. Click “Publish changes” when you're ready for customers to see them.`, "ok");
+      }
+    });
+  });
   $("aDiscard").addEventListener("click", () => say("Throw away all unpublished changes?", "error", [
     { label: "Discard changes", danger: true, fn: () => { S.draft = clone(S.orig); S.draftFeat = S.origFeat.slice(); S.selected.clear(); renderList(); say("Changes discarded.", "ok"); } },
     { label: "Keep them", fn: () => say("") }

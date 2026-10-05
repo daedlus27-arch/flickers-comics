@@ -110,6 +110,25 @@ on their own as you add issues; nothing to set up.
 takings by week and how long orders take to hand over, for the last 4 weeks up to a year. It's built from a small record kept for each
 order (what was bought and when, never who by) that outlives the order itself, so the history lasts after finished orders are deleted.
 
+## Staff tools
+
+- **Take an order** (Orders tab → **+ Take an order**): for phone orders and people at the counter. Search for the comics, add them, enter a name
+  (a phone number is optional), and choose *Counter sale: handed over now*, *Collect later* or *Post it*. It becomes a normal order: the shelf is
+  updated from the real stock, the deal applies, it's posted to Discord (without pinging the staff role, since staff keyed it in), it counts in
+  the Sales tab, and it shows who entered it. A counter sale goes straight to the Archive as collected (and paid, if ticked).
+- **Finding and working orders** (Orders tab): search by order number, name or phone number (any way it's written); narrow to *Not paid*, *Due today*
+  or *To post*; a strip at the top counts today's collections and any earlier ones not picked up. **Copy message** gives a ready-to-send text for
+  the order's stage ("Your order FC-… is ready to collect on Mon 5 Oct…"); the Wanted tab has the same for people waiting on a comic.
+  **Print slip** (one order) or **Print slips** (everything shown) gives a page per order listing the comics to gather, with tick boxes, who it's for,
+  how it goes out, the deal and the total.
+- **Reorder** (Reorder tab): comics that are sold out, down to their last two, or wanted by more people than there are copies, with who's waiting,
+  what sold over the last eight weeks, and a suggested number (enough for the people waiting plus about two weeks of sales, less what's on the shelf).
+  Change numbers, untick rows, then copy the list or download it as a spreadsheet. Things customers requested that you don't stock are listed below.
+- **Receive shipment** (Stock tab): tap +1 or +5 on a search result, or paste a list. One comic per line with the number that arrived works however
+  it's written (`Batman #14, 5`, `Flash #2 x3`, `5 x Saga #1`, `batman-14<TAB>5`) as do a spreadsheet's rows with a Title and Quantity column. Lines that
+  match more than one comic ask which; lines that match nothing are flagged. Applying adds the copies to the stock list as ordinary unpublished
+  changes (with an option to mark them New), ready to publish.
+
 ## Working on the site
 
 Needs [Node.js](https://nodejs.org) 20 or newer.

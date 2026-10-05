@@ -13,7 +13,7 @@ check("only the selected tab is in the tab order", await page.$$eval('[role="tab
 check("panel is labelled by the selected tab", await page.$eval("#panel", p => p.getAttribute("aria-labelledby") === "tab-stock"));
 await page.focus('[data-tab="stock"]');
 await page.keyboard.press("ArrowRight"); await new Promise(r => setTimeout(r, 500));
-check("Right arrow selects the next tab and keeps focus on it", (await sel()) === "orders" && (await active()) === "orders");
+check("Right arrow selects the next tab and keeps focus on it", (await sel()) === "reorder" && (await active()) === "reorder");
 await page.keyboard.press("End"); await new Promise(r => setTimeout(r, 500));
 check("End goes to the last tab", (await sel()) === "account" && (await active()) === "account");
 await page.keyboard.press("ArrowRight"); await new Promise(r => setTimeout(r, 500));

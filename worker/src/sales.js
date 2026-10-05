@@ -32,7 +32,7 @@ async function backfill(env) {
   return n;
 }
 
-async function allSales(env) {
+export async function allSales(env) {
   const out = [];
   let cursor;
   for (let pages = 0; pages < 8; pages++) { // up to 8,000 sales

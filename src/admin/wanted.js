@@ -1,6 +1,7 @@
 /* Staff area: the Wanted tab (notify me, pull list, requests). */
 import { esc } from "../shared.mjs";
-import { $, api, say, orderWhen, pager } from "./core.js";
+import { $, api, say, orderWhen, pager, copyText } from "./core.js";
+import { wantMessage } from "./messages.js";
 
 /* ---------- wanted tab ---------- */
 const WANT_KIND = { restock: "Back in stock", series: "Pull list", request: "Request" };
@@ -20,6 +21,7 @@ function wantHTML(w) {
     </div>
     <div class="want-actions">
       <button type="button" class="btn btn-small${act ? " btn-yellow" : ""}" data-wstatus="${w.status === "contacted" ? "waiting" : "contacted"}" data-wid="${esc(w.id)}">${w.status === "contacted" ? "Back to waiting" : "Mark contacted"}</button>
+      <button type="button" class="btn btn-small btn-quiet" data-wcopy="${esc(w.id)}">Copy message</button>
       <button type="button" class="link-btn danger-link" data-wdelete="${esc(w.id)}" aria-label="Remove ${esc(w.name)}'s request">Remove</button>
     </div>
   </li>`;
@@ -41,7 +43,8 @@ export async function renderWanted() {
     $("wantedList").insertAdjacentHTML("beforeend", pg.html("requests"));
   };
   $("wantedList").addEventListener("click", async ev => {
-    const more = ev.target.closest("[data-more]"), s = ev.target.closest("[data-wid]"), d = ev.target.closest("[data-wdelete]");
+    const more = ev.target.closest("[data-more]"), s = ev.target.closest("[data-wid]"), d = ev.target.closest("[data-wdelete]"), c = ev.target.closest("[data-wcopy]");
+    if (c) { const w = wants.find(x => x.id === c.dataset.wcopy); if (w) copyText(wantMessage(w), `Message for ${w.name} copied. Paste it into your text.`); return; }
     if (more) { more.disabled = true; try { await pg.more(); paint(); } catch (e) { more.disabled = false; say(e.message, "error"); } return; }
     if (s) {
       s.disabled = true;

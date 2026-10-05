@@ -188,3 +188,81 @@ export function detailHTML(p, cats, { imgBase = "", level = 1, headingId = "", c
     </div>
   </div>`;
 }
+
+/* ---------- receiving a shipment ----------
+   Staff paste what arrived, one comic per line, however they happen to write it:
+     Batman #14, 5     Batman #14 x5     5 x Batman #14     batman-14<TAB>5     Batman 14 5     Batman #14   (a bare line is one copy)
+   or the rows of a spreadsheet with a Title and Quantity column. Returns [{ text, qty }] in the order given. */
+const QTY_WORDS = ["qty", "quantity", "copies", "count", "number", "amount", "received"];
+const TITLE_WORDS = ["title", "comic", "name", "item", "product", "id"];
+function splitCsvLine(line) {
+  const out = []; let cur = "", quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') quoted = false; else cur += c; }
+    else if (c === '"') quoted = true;
+    else if (c === "," || c === "\t" || c === ";") { out.push(cur); cur = ""; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out.map(x => x.trim());
+}
+export function parseReceiving(input) {
+  const lines = String(input || "").split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith("#!") && !l.startsWith("//"));
+  let titleCol = -1, qtyCol = -1;
+  if (lines.length) { // a header row names the columns
+    const head = splitCsvLine(lines[0]).map(h => h.toLowerCase());
+    const q = head.findIndex(h => QTY_WORDS.includes(h)), t = head.findIndex(h => TITLE_WORDS.includes(h));
+    if (q >= 0 && t >= 0) { titleCol = t; qtyCol = q; lines.shift(); }
+  }
+  const out = [];
+  for (const line of lines) {
+    let text = line, qty = 1;
+    if (titleCol >= 0) {
+      const cells = splitCsvLine(line);
+      text = cells[titleCol] || ""; qty = Math.floor(Number(cells[qtyCol])) || 1;
+    } else {
+      let m;
+      if ((m = line.match(/^(\d{1,3})\s*[x×]\s*(.+)$/i))) { qty = Number(m[1]); text = m[2]; }                    // 5 x Batman #14
+      else if ((m = line.match(/^(.+?)\s*[,;\t]\s*[x×]?\s*(\d{1,3})$/i))) { text = m[1]; qty = Number(m[2]); }       // Batman #14, 5
+      else if ((m = line.match(/^(.+?)\s+[x×]\s*(\d{1,3})$/i))) { text = m[1]; qty = Number(m[2]); }                 // Batman #14 x5
+      else if ((m = line.match(/^(.+\d)\s+(\d{1,3})$/))) { text = m[1]; qty = Number(m[2]); }                         // Batman 14 5
+    }
+    text = text.replace(/^["']|["']$/g, "").trim();
+    if (text) out.push({ text, qty: Math.min(999, Math.max(1, qty)) });
+  }
+  return out;
+}
+
+/* Which comic does a typed line mean? Returns { product } when it's clear, or { candidates } (up to 5) when it's ambiguous or unknown. */
+export function matchComic(products, text, cats = []) {
+  const t = String(text).trim(), lower = t.toLowerCase();
+  const byId = products.find(p => p.id === lower);
+  if (byId) return { product: byId, candidates: [byId] };
+  const exact = products.filter(p => norm(fullTitle(p)) === norm(t));
+  if (exact.length === 1) return { product: exact[0], candidates: exact };
+  const items = products.map(p => ({ words: searchWords(p, cats), blurb: "" }));
+  const { flags, mode } = searchItems(items, t);
+  const hits = products.filter((p, i) => flags[i]);
+  if (hits.length === 1 && mode !== "none") return { product: hits[0], candidates: hits, mode };
+  // several matches: the one whose title says exactly what was typed wins, otherwise let staff choose
+  const starts = hits.filter(p => norm(fullTitle(p)).startsWith(norm(t)));
+  if (starts.length === 1 && hits.length > 1 && norm(fullTitle(starts[0])) === norm(t)) return { product: starts[0], candidates: hits.slice(0, 5), mode };
+  return { candidates: hits.slice(0, 5), mode };
+}
+
+/* ---------- what to reorder ---------- */
+export const REORDER_LOW = 2; // "nearly gone" means this many or fewer left
+/* Enough for the people waiting plus about two weeks of sales (a quarter of the last eight weeks), less what's on the shelf. */
+export function suggestReorder(stock, waiting, sold) {
+  const want = waiting + Math.ceil(sold / 4) - Math.max(0, stock);
+  return stock <= 0 ? Math.max(1, want) : Math.max(0, want);
+}
+/* Sold out, nearly gone, or wanted by more people than there are copies. data: { waiting: {id: n}, sold: {id: n} }. Most wanted first. */
+export function reorderRows(products, data) {
+  return products
+    .map(p => ({ p, stock: p.stock, waiting: data.waiting[p.id] || 0, sold: data.sold[p.id] || 0 }))
+    .filter(r => r.stock <= REORDER_LOW || r.waiting > r.stock)
+    .map(r => ({ ...r, suggested: suggestReorder(r.stock, r.waiting, r.sold) }))
+    .sort((x, y) => y.waiting - x.waiting || y.sold - x.sold || x.stock - y.stock || fullTitle(x.p).localeCompare(fullTitle(y.p)));
+}

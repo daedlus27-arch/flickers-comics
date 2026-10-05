@@ -105,3 +105,29 @@ export function pager(path, key, first) {
   state.html = (what) => state.cursor ? `<p class="hint orders-more">Showing the newest ${items.length} ${what}. <button type="button" class="btn btn-small" data-more>Show older ${what}</button></p>` : "";
   return state;
 }
+
+/* The shop's published settings (hours, postage, the deal, time zone), fetched once. */
+let shopCfg = null;
+export const shopConfig = () => (shopCfg ||= fetch("../data/shop.json", { cache: "no-store" }).then(r => r.json()).then(d => d.config || {}).catch(() => ({})));
+/* today's date (YYYY-MM-DD) where the shop is */
+export const shopToday = cfg => { try { return new Intl.DateTimeFormat("en-CA", { timeZone: cfg.timeZone || undefined, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } };
+
+/* copy text to the clipboard, saying so (or why not) in the page's message bar */
+export async function copyText(text, done = "Copied. Paste it into your message.") {
+  try { await navigator.clipboard.writeText(text); say(done, "ok"); }
+  catch (e) { say("Couldn't copy automatically. Select the text and copy it by hand: " + text, "error"); }
+}
+
+/* A spreadsheet opens a cell that starts with = + - or @ as a formula, so typed text like that is defused with a leading quote. */
+export function csvCell(v) {
+  let s = String(v ?? "");
+  if (/^[=@\t\r]/.test(s) || (/^[+-]/.test(s) && !/^[+-]?[\d\s()-]+$/.test(s))) s = "'" + s;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+export function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+

@@ -13,7 +13,7 @@
      USERS                the KV namespace. Orders are kept 90 days; finished ones (collected, posted or
                           cancelled) move to the archive and are deleted 14 days after they finish. */
 import { HttpError, bad } from "./http.js";
-import { adjustStock } from "./github.js";
+import { adjustStock, readStock } from "./github.js";
 import { loadShop, shopConfig, siteBase } from "./shop.js";
 import { escMd, cut, pingRole, webhook } from "./discord.js";
 import { announceRestocks } from "./wants.js";
@@ -60,20 +60,22 @@ function dateInRange(iso, daysAhead) {
   return t >= today - day && t <= today + (daysAhead + 1) * day; // a day of slack either side for time zones
 }
 
-export function buildOrder(raw, shop, { test = false } = {}) {
+/* staff: an order keyed in by someone at the counter or on the phone. The phone number is optional, a collection day defaults to today,
+   and a name can be short ("Walk-in"). Everything else is checked the same way. */
+export function buildOrder(raw, shop, { test = false, staff = false } = {}) {
   if (!raw || typeof raw !== "object") throw bad(400, "That order wasn't valid.");
   const cfg = shop.config || {}, byId = new Map((shop.products || []).map(p => [p.id, p]));
 
   const name = clean(raw.name, 80);
-  if (name.length < 3) throw bad(400, "Enter your full name.");
+  if (name.length < (staff ? 2 : 3)) throw bad(400, staff ? "Enter the customer's name." : "Enter your full name.");
   const phone = clean(raw.phone, 30), digits = digitsOf(phone);
-  if (/[^\d\s()+\-#]/.test(phone) || digits.length < 4 || digits.length > 15) throw bad(400, "Enter your phone number using digits only.");
+  if (!(staff && !phone) && (/[^\d\s()+\-#]/.test(phone) || digits.length < 4 || digits.length > 15)) throw bad(400, "Enter the phone number using digits only.");
   const method = raw.method === "post" ? "post" : raw.method === "collect" ? "collect" : null;
   if (!method) throw bad(400, "Choose collection or postage.");
 
   let collectDate = null, address = null;
   if (method === "collect") {
-    collectDate = clean(raw.collectDate, 10);
+    collectDate = clean(raw.collectDate, 10) || (staff ? new Date().toISOString().slice(0, 10) : "");
     if (!dateInRange(collectDate, Number(cfg.collectDaysAhead) || 14)) throw bad(400, "Pick a collection day within the next two weeks.");
   } else {
     address = clean(raw.address, 300);
@@ -144,7 +146,7 @@ export function orderEmbed(o, cfg = {}) {
     description,
     color: o.test ? 0x949BA4 : STATUS_COLOR[status],
     fields,
-    footer: { text: o.test ? "Test message, not a real order" : o.paid ? "Paid" : "Payment pending" },
+    footer: { text: o.test ? "Test message, not a real order" : (o.paid ? "Paid" : "Payment pending") + (o.source === "staff" ? ` · Entered by ${o.enteredBy}` : "") },
     timestamp: o.placedAt
   };
 }
@@ -156,10 +158,10 @@ async function postToDiscord(env, order, cfg) {
     payload: {
       username: "Flickers Orders",
       ...(siteBase(env) ? { avatar_url: `${siteBase(env)}/assets/apple-touch-icon.png` } : {}),
-      content: role && !order.test ? `<@&${role}> new order` : undefined,
+      content: role && !order.test && order.source !== "staff" ? `<@&${role}> new order` : undefined, // no ping for orders staff key in themselves
       embeds: [orderEmbed(order, cfg)],
       // Customers type some of this text, so nothing in the message is ever allowed to ping anyone except the one role we choose.
-      allowed_mentions: { parse: [], roles: role && !order.test ? [role] : [] }
+      allowed_mentions: { parse: [], roles: role && !order.test && order.source !== "staff" ? [role] : [] }
     }
   });
 }
@@ -181,9 +183,16 @@ export async function placeOrder(env, raw, ip) {
   const n = Number(await env.USERS.get(rlKey)) || 0;
   if (n >= ORDERS_PER_WINDOW) throw bad(429, "That's a lot of orders from your connection. Wait a few minutes and try again.");
   await env.USERS.put(rlKey, String(n + 1), { expirationTtl: WINDOW_SECONDS });
+  return createOrder(env, raw);
+}
 
-  const shop = await loadShop(env);
-  const order = buildOrder(raw, shop);
+/* An order keyed in by signed-in staff (counter or phone). Not rate limited, and it works even while online ordering is switched off. */
+export function staffOrder(env, raw, user) { return createOrder(env, raw, user); }
+
+async function createOrder(env, raw, user = null) {
+  let shop = await loadShop(env);
+  if (user) { try { shop = { ...shop, products: (await readStock(env)).products }; } catch (e) { /* the published list will do */ } } // freshest prices and stock
+  const order = buildOrder(raw, shop, { staff: !!user });
   for (let tries = 0; tries < 5 && await env.USERS.get(`oid:${order.id}`); tries++) order.id = newOrderId();
 
   // Take the comics off the shelf. This checks the real stock in GitHub, so two customers can't both get the last copy.
@@ -202,13 +211,23 @@ export async function placeOrder(env, raw, ip) {
   const key = orderKey(order);
   await env.USERS.put(`oid:${order.id}`, key, { expirationTtl: ORDER_TTL }); // also how an order is found again
   const record = { ...order, status: "new", discord: "pending" };
-  await env.USERS.put(key, JSON.stringify(record), { expirationTtl: ORDER_TTL }); // saved before Discord is tried
+  if (user) {
+    const at = new Date().toISOString();
+    Object.assign(record, { source: "staff", enteredBy: user.username, history: [{ at, by: user.username, change: "entered" }] });
+    if (raw.paid === true) record.paid = true;
+    if (raw.handedOver === true && order.method === "collect") { // a counter sale: it's already in the customer's hands
+      Object.assign(record, { status: "done", completedAt: at });
+      record.history.push({ at, by: user.username, change: "done" });
+    }
+  }
+  await env.USERS.put(key, JSON.stringify(record), { expirationTtl: ttlSeconds(record) }); // saved before Discord is tried
   const sent = await postToDiscord(env, record, shop.config);
   record.discord = sent.ok ? "sent" : `failed: ${sent.reason}`;
   if (sent.id) record.discordId = sent.id;
-  await env.USERS.put(key, JSON.stringify(record), { expirationTtl: ORDER_TTL });
+  await env.USERS.put(key, JSON.stringify(record), { expirationTtl: ttlSeconds(record) });
   await recordSale(env, record).catch(() => {}); // the customer-free record the sales report is built from
   if (shelf) await announceLowStock(env, shelf.before, shelf.products).catch(() => {}); // after the order itself is posted, say what's running out
+  if (user) return { orderId: order.id, subtotal: order.subtotal, discount: order.discount || 0, postage: order.postage, total: order.total, paid: !!record.paid, order: record };
   return { orderId: order.id, subtotal: order.subtotal, discount: order.discount || 0, postage: order.postage, total: order.total, paid: false };
 }
 

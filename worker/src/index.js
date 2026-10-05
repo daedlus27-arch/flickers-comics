@@ -17,9 +17,10 @@
    Orders and Discord (src/orders.js, docs/DISCORD.md): SITE_URL, ORDERS_ENABLED, DISCORD_WEBHOOK_URL, DISCORD_PING_ROLE */
 
 import { HttpError, bad } from "./http.js";
-import { placeOrder, lookupOrder, listOrders, sendTestMessage, updateOrder } from "./orders.js";
+import { placeOrder, staffOrder, lookupOrder, listOrders, sendTestMessage, updateOrder } from "./orders.js";
 import { createWant, listWants, updateWant, deleteWant, announceRestocks, announceNewIssues } from "./wants.js";
 import { salesReport, reportParams } from "./sales.js";
+import { reorderData } from "./reorder.js";
 import { gh, readStock, branchName, serializeProducts, mergeStock } from "./github.js";
 
 const PBKDF2_ITERATIONS = 100000; // Cloudflare Workers allows at most 100,000
@@ -299,6 +300,8 @@ async function route(request, env) {
 
   if (method === "GET" && path === "/orders") return { ...(await listOrders(env, url.searchParams.get("cursor"))), ordersOpen: String(env.ORDERS_ENABLED) === "true", discord: !!env.DISCORD_WEBHOOK_URL };
   if (method === "POST" && path === "/orders/test") return sendTestMessage(env, user);
+  if (method === "POST" && path === "/staff/orders") return staffOrder(env, await readJson(request), user);
+  if (method === "GET" && path === "/reorder") return reorderData(env);
   if (method === "GET" && path === "/report") { needOwner(user); return salesReport(env, reportParams(url)); }
   if (method === "GET" && path === "/wants") return listWants(env, url.searchParams.get("cursor"));
   const wm = /^\/wants\/([^/]+)$/.exec(path);

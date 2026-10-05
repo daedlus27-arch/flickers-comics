@@ -29,8 +29,9 @@ const seriesTitle = p => p.title + (p.vol ? " " + p.vol : "");
    Each want is stored with a little metadata (kind, comic, series) that a key listing returns for free, so a scan only reads the few that match. */
 const metaOf = w => ({ k: w.kind, ...(w.productId ? { p: w.productId } : {}), ...(w.seriesKey ? { s: w.seriesKey.slice(0, 200) } : {}) });
 const save = (env, w) => env.USERS.put(wantKey(w), JSON.stringify(w), { expirationTtl: ttlFor(w), metadata: metaOf(w) });
+export const wantsFromKeys = (env, keys) => readAll(env, keys);
 const readAll = async (env, keys) => (await Promise.all(keys.map(k => env.USERS.get(k.name)))).filter(Boolean).map(raw => JSON.parse(raw));
-async function wantKeys(env) {
+export async function wantKeys(env) {
   const out = [];
   let cursor;
   do {
