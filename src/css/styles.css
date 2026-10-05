@@ -95,6 +95,7 @@ h1,h2,h3{text-wrap:balance}
 .header-in{display:flex;align-items:center;gap:20px;min-height:var(--header-h);padding-block:8px}
 .logo-link{display:block;flex:0 1 auto;min-width:0;line-height:0}
 .logo{display:block;height:clamp(36px,7vw,54px);width:auto;max-width:100%}
+@media (max-width:340px){.logo{height:30px}}
 .header-actions{margin-left:auto;display:flex;align-items:center;gap:24px;flex:none}
 .nav{display:flex;gap:22px}
 .nav a{padding-block:6px;border-bottom:2px solid transparent;color:var(--brand-fg);font-weight:700;font-size:15px;text-decoration:none}
