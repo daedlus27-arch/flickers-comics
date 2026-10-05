@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
+import * as esbuild from "esbuild";
 import { fullTitle, coverName } from "../src/shared.mjs";
 import { page, homePage, comicPage, notFoundPage, DEFAULT_DESC } from "./templates.mjs";
 import { adminPage } from "./admin-page.mjs";
@@ -73,29 +74,31 @@ for (const [pkg, family, weights] of FONTS) {
     const src = path.join(ROOT, "node_modules", "@fontsource", pkg, "files", file);
     if (!fs.existsSync(src)) { console.error(`Missing font file ${file}. Run npm install.`); process.exit(1); }
     wr(`fonts/${file}`, fs.readFileSync(src));
-    fontCss += `@font-face{font-family:"${family}";font-style:normal;font-weight:${w};font-display:swap;src:url(../fonts/${file}) format("woff2")}\n`;
+    fontCss += `@font-face{font-family:"${family}";font-style:normal;font-weight:${w};font-display:swap;src:url(__ROOT__fonts/${file}) format("woff2")}`;
   }
 }
-wr("css/fonts.css", fontCss);
 const fontPreload = ["fonts/anton-latin-400-normal.woff2", "fonts/archivo-latin-400-normal.woff2", "fonts/archivo-latin-700-normal.woff2"];
 
 /* ---------- css, js, static assets ---------- */
-cp("src/css/styles.css", "css/styles.css");
-cp("src/css/admin.css", "css/admin.css");
-cp("src/shared.mjs", "js/shared.js");
-cp("src/js/site.js", "js/site.js");
-cp("src/admin/admin.js", "admin/admin.js");
+for (const name of ["styles", "admin"]) {
+  const out = await esbuild.transform(fs.readFileSync(path.join(ROOT, `src/css/${name}.css`), "utf8"), { loader: "css", minify: true });
+  wr(`css/${name}.css`, out.code);
+}
+await esbuild.build({
+  entryPoints: { "js/site": path.join(ROOT, "src/js/site.js"), "admin/admin": path.join(ROOT, "src/admin/admin.js") },
+  outdir: DIST, bundle: true, minify: true, format: "esm", target: "es2022", legalComments: "none", logLevel: "warning"
+});
 for (const f of ["flickers-logo.png", "favicon.png", "apple-touch-icon.png"]) cp(`assets/${f}`, `assets/${f}`);
 wr(".nojekyll", "");
 
-/* ---------- covers: webp at two sizes ---------- */
+/* ---------- covers: webp at three sizes ---------- */
 const images = [...new Set(products.map(p => p.image).filter(Boolean))];
 await Promise.all(images.flatMap(img => {
   const name = coverName(img), input = path.join(ROOT, img);
-  return [[400, 78], [600, 80]].map(async ([w, q]) => {
+  return [[300, 68], [450, 70], [600, 72]].map(async ([w, q]) => {
     const out = path.join(DIST, "img", "covers", `${name}-${w}.webp`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    await sharp(input).rotate().resize({ width: w, withoutEnlargement: false }).webp({ quality: q }).toFile(out);
+    await sharp(input).rotate().resize({ width: w, withoutEnlargement: false }).webp({ quality: q, effort: 5 }).toFile(out);
   });
 }));
 
@@ -113,7 +116,7 @@ await Promise.all(images.flatMap(img => {
 /* ---------- pages ---------- */
 const ctxFor = root => ({ root, cfg, cats, products, featured: featuredRaw, groups, groupBy, groupKey });
 const ogDefault = `${siteUrl}/assets/og.png`;
-const shell = (opts) => page({ cfg, fontPreload, ...opts });
+const shell = (opts) => page({ cfg, fontPreload, fontCss, ...opts });
 
 // home
 wr("index.html", shell({
@@ -154,12 +157,12 @@ for (const p of products) {
   const root = new URL(siteUrl + "/").pathname;
   wr("404.html", shell({
     title: "Page not found | Flickers Comics", desc: DEFAULT_DESC, root, noindex: true,
-    css: ["css/fonts.css", "css/styles.css"], body: notFoundPage(ctxFor(root))
+    body: notFoundPage(ctxFor(root))
   }));
 }
 
 // staff manager
-wr("admin/index.html", adminPage({ cfg }));
+wr("admin/index.html", adminPage({ cfg, fontCss }));
 
 /* ---------- data for the browser, sitemap, robots ---------- */
 wr("data/shop.json", JSON.stringify({

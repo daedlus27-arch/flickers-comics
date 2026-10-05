@@ -1,7 +1,7 @@
 /* Flickers Comics storefront.
    The shelves and comic pages are rendered at build time (see build/). This script adds the cart,
    quick view, checkout, search and filters on top. Stock and prices come from data/shop.json. */
-import { esc, escLines, money, GRADES, catOf, fullTitle, stockWord, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "./shared.js";
+import { esc, escLines, money, GRADES, catOf, fullTitle, stockWord, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "../shared.mjs";
 
 const root = document.body.dataset.root || "";
 const $ = id => document.getElementById(id);
@@ -89,6 +89,25 @@ function setQty(id, n) {
 /* ===================== shelves ===================== */
 const grid = $("grid");
 const filters = { group: "all", q: "", sort: "featured" };
+const SORTS = ["featured", "price-asc", "price-desc", "title"];
+// The shelf (publisher or category tab), search and sort live in the address, e.g. ?shelf=DC+Comics&sort=price-asc,
+// so a filtered shelf can be shared and the Back button keeps working. Other parameters are left alone.
+function readUrlState() {
+  const p = new URLSearchParams(location.search);
+  const q = p.get("q"), s = p.get("sort"), g = p.get("shelf");
+  if (q) { filters.q = q; if ($("q")) $("q").value = q; }
+  if (SORTS.includes(s)) { filters.sort = s; if ($("sort")) $("sort").value = s; }
+  if (g && document.querySelector(`.divider[data-group="${CSS.escape(g)}"]`)) filters.group = g;
+}
+function writeUrlState() {
+  const p = new URLSearchParams(location.search);
+  ["shelf", "q", "sort"].forEach(k => p.delete(k));
+  if (filters.group !== "all") p.set("shelf", filters.group);
+  if (filters.q.trim()) p.set("q", filters.q.trim());
+  if (filters.sort !== "featured") p.set("sort", filters.sort);
+  const qs = p.toString();
+  try { history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash); } catch (e) { /* ignore */ }
+}
 
 function applyFilters() {
   if (!grid) return;
@@ -110,13 +129,18 @@ function applyFilters() {
     grid.appendChild(c);
   });
   $("empty").hidden = shown > 0;
+  writeUrlState();
   const tab = filters.group === "all" ? null : document.querySelector(`.divider[data-group="${CSS.escape(filters.group)}"]`);
   const label = filters.group === "all" ? "" : ` in ${tab && tab.firstChild ? tab.firstChild.textContent : filters.group}`;
   $("results").textContent = shown ? `${shown} ${shown === 1 ? "item" : "items"}${label}${q ? ` matching “${filters.q.trim()}”` : ""}` : "";
 }
 function setGroup(g) {
   filters.group = g;
-  document.querySelectorAll(".divider").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.group === g)));
+  document.querySelectorAll(".divider").forEach(b => {
+    const on = b.dataset.group === g;
+    b.setAttribute("aria-pressed", String(on));
+    if (on && b.parentElement.scrollWidth > b.parentElement.clientWidth) b.parentElement.scrollTo({ left: Math.max(0, b.offsetLeft - 24) }); // slide the tab row sideways only, never the page
+  });
   applyFilters();
 }
 
@@ -404,7 +428,7 @@ function showDone(o) {
     <div class="done-top">
       <p class="eyebrow">${o.test ? "Test order" : o.paid ? "Payment received" : "Order received"}</p>
       <h2 class="done-title" id="doneTitle" tabindex="-1">Thanks, ${esc(firstName(o.name))}. Order received.</h2>
-      <p class="ticket">Order <strong>${esc(o.id)}</strong></p>
+      <p class="ticket">Order <strong>${esc(o.id)}</strong> <button type="button" class="link-btn" data-copy="${esc(o.id)}">Copy</button></p>
       <p class="done-note">${o.test ? "This was a test, so nothing was charged and the shop wasn't notified." : o.paid ? "Your payment went through and the shop has your order." : "The shop has your order."}</p>
     </div>
     <div class="done-grid">
@@ -490,9 +514,15 @@ function buyAction(action, st, rerender, inDialog) {
 }
 
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-open],[data-add],.divider[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close]");
+  const t = ev.target.closest("[data-open],[data-add],.divider[data-group],[data-inc],[data-dec],[data-remove],[data-qv],[data-close],[data-copy]");
   if (!t) return;
   const d = t.dataset;
+  if (d.copy) {
+    const done = () => toast("Order number copied.");
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(d.copy).then(done, () => toast("Couldn't copy. Select the number and copy it by hand."));
+    else toast("Couldn't copy. Select the number and copy it by hand.");
+    return;
+  }
   if (d.open) {
     if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || ev.button) return; // let the link open normally
     ev.preventDefault(); openQuickView(d.open); return;
@@ -528,9 +558,17 @@ if ($("q")) {
   $("sort").addEventListener("change", ev => { filters.sort = ev.target.value; applyFilters(); });
   $("clearSearch").addEventListener("click", () => { filters.q = ""; $("q").value = ""; setGroup("all"); $("q").focus(); });
 }
+document.addEventListener("keydown", ev => {
+  if (ev.key !== "/" || ev.ctrlKey || ev.metaKey || ev.altKey || !$("q")) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || document.querySelector("dialog[open]")) return;
+  ev.preventDefault();
+  $("q").focus();
+  $("q").scrollIntoView({ block: "center" });
+});
 window.addEventListener("storage", ev => { if (ev.key === CART_KEY) { cart = sanitizeCart(store.get(CART_KEY, {})); renderCartUI(); } });
 
 /* ===================== start ===================== */
+if (grid) { readUrlState(); setGroup(filters.group); }
 try {
   const data = await statusReady;
   CONFIG = data.config; CATEGORIES = data.categories; PRODUCTS = data.products;

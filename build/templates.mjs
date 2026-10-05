@@ -7,7 +7,7 @@ export const BUILD_ID = Date.now().toString(36);
 export const DEFAULT_DESC = "Independent comic shop. Order online, then collect at the counter or have it posted to you.";
 
 /* ---------- page shell ---------- */
-export function page({ title, desc, root = "", canonical, ogImage, ogType = "website", body, jsonld, cfg, css = ["css/fonts.css", "css/styles.css"], script = "js/site.js", noindex = false, extraHead = "", csp, fontPreload = [] }) {
+export function page({ title, desc, root = "", canonical, ogImage, ogType = "website", body, jsonld, cfg, css = ["css/styles.css"], script = "js/site.js", noindex = false, extraHead = "", csp, fontPreload = [], fontCss = "" }) {
   const orderOrigin = cfg.orderApi ? ` ${new URL(cfg.orderApi).origin}` : "";
   const policy = csp || `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'${orderOrigin}; base-uri 'self'; form-action 'self'${orderOrigin}`;
   return `<!doctype html>
@@ -19,6 +19,7 @@ export function page({ title, desc, root = "", canonical, ogImage, ogType = "web
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
 <meta name="theme-color" content="#0E1211">
+<meta name="color-scheme" content="light dark">
 ${noindex ? '<meta name="robots" content="noindex">' : ""}${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ""}
 <meta property="og:site_name" content="${SITE_NAME}">
 <meta property="og:type" content="${ogType}">
@@ -29,7 +30,9 @@ ${ogImage ? `<meta property="og:image" content="${esc(ogImage)}">\n<meta name="t
 <link rel="icon" type="image/png" href="${root}assets/favicon.png">
 <link rel="apple-touch-icon" href="${root}assets/apple-touch-icon.png">
 ${fontPreload.map(f => `<link rel="preload" href="${root}${f}" as="font" type="font/woff2" crossorigin>`).join("\n")}
+${fontCss ? `<style>${fontCss.split("__ROOT__").join(root)}</style>` : ""}
 ${css.map(c => `<link rel="stylesheet" href="${root}${c}">`).join("\n")}
+${script === "js/site.js" ? `<link rel="preload" href="${root}data/shop.json?v=${BUILD_ID}" as="fetch" crossorigin>` : ""}
 ${extraHead}
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, "\\u003c")}</script>` : ""}
 </head>
@@ -43,12 +46,12 @@ ${script ? `<script type="module" src="${root}${script}"></script>` : ""}
 
 /* ---------- chrome ---------- */
 export function topStrip(cfg) {
-  return `<div class="topstrip">
+  return `<section class="topstrip" aria-label="Opening hours and postage">
   <div class="wrap topstrip-in">
     <span class="status" id="stripStatus"><span class="status-dot" aria-hidden="true"></span><span id="stripStatusText">Open every day, ${hoursText(cfg)}</span></span>
     <span class="strip-extra"><span>Collect in store for free</span><span>Postage ${money(cfg.postage)}</span></span>
   </div>
-</div>`;
+</section>`;
 }
 
 export function header(root, { logo = "assets/flickers-logo.png" } = {}) {
@@ -65,7 +68,8 @@ export function header(root, { logo = "assets/flickers-logo.png" } = {}) {
       </button>
     </div>
   </div>
-</header>`;
+</header>
+<nav class="subnav" aria-label="Main (small screens)"><a href="${root}#shop">Shop</a><a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a></nav>`;
 }
 
 export function footer(root, cfg) {
@@ -75,7 +79,7 @@ export function footer(root, cfg) {
     <div class="footer-cols">
       <div><h2>Hours</h2><p>Every day, ${hoursText(cfg)}</p></div>
       <div><h2>Orders</h2><p>Collect in store: free<br>Postage: ${money(cfg.postage)}</p></div>
-      <div><h2>Payment</h2><p>Pay from your bank account<br>through Fleeca</p></div>
+      <div><h2>Payment</h2><p>${cfg.payOnline ? "Pay from your bank account<br>through Fleeca" : "Online payment through<br>Fleeca is coming soon"}</p></div>
     </div>
     <p class="fine">© Flickers Comics. All prices in dollars. <a class="footer-link" href="${root}admin/">Staff login</a></p>
   </div>
@@ -197,6 +201,7 @@ export function cardHTML(p, ctx, i) {
   const extras = [];
   if ((p.badges || []).includes("new") && p.stock > 0) extras.push("new");
   if (p.staff) extras.push("staff pick");
+  if (p.stock <= 0) extras.push("sold out");
   const low = p.stock <= 0 ? `<span class="low">Sold out</span>` : p.stock <= 2 ? `<span class="low">Only ${p.stock} left</span>` : "";
   const q = [t, p.publisher, catOf(cats, p.cat).label, p.blurb].join(" ").toLowerCase();
   const soldOff = p.stock <= 0;
@@ -245,7 +250,7 @@ export function homePage(ctx) {
   const { cfg, cats, products, featured, groups, groupLabel, root = "" } = ctx;
   const byId = new Map(products.map(p => [p.id, p]));
   const hero = featured.map(id => byId.get(id)).filter(Boolean).slice(0, 3);
-  const fan = hero.map((p, i) => `<a class="fan fan-${i + 1}" href="${comicUrl(root, p)}" data-open="${esc(p.id)}" aria-label="${esc(fullTitle(p))}. View details">${coverHTML(p, { imgBase: root, priority: i === 1, lazy: false, sizes: "(min-width: 860px) 200px, 150px" })}</a>`).join("");
+  const fan = hero.map((p, i) => `<a class="fan fan-${i + 1}" href="${comicUrl(root, p)}" data-open="${esc(p.id)}" aria-label="${esc(fullTitle(p))}. View details">${coverHTML(p, { imgBase: root, priority: i === 1, lazy: false, sizes: "(min-width: 860px) 200px, 40vw" })}</a>`).join("");
   const burst = `<svg class="burst" viewBox="-100 -100 200 200" aria-hidden="true"><polygon points="${burstPoints(0, 0, 66, 100, 22)}" fill="currentColor"/></svg>`;
   const total = products.length;
   const dividers = groups.length > 1
@@ -288,7 +293,7 @@ ${header(root)}
           <label class="search">
             <span class="sr-only">Search the shelves</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            <input type="search" id="q" placeholder="Search titles or publishers" autocomplete="off">
+            <input type="search" id="q" placeholder="Search titles or publishers" autocomplete="off" aria-keyshortcuts="/">
           </label>
           <label class="sort"><span>Sort</span>
             <select id="sort">
@@ -327,8 +332,11 @@ function howSection(cfg) {
       <ol class="panels">
         <li class="panel"><span class="panel-n" aria-hidden="true">1</span><h3>Fill your cart</h3><p>Add what you want from the shelves. Each title shows when stock is running low.</p></li>
         <li class="panel"><span class="panel-n" aria-hidden="true">2</span><h3>Collect or post</h3><p>Pick a day to collect at the counter for free, or have it posted to you for ${money(cfg.postage)}.</p></li>
-        <li class="panel"><span class="panel-n" aria-hidden="true">3</span><h3>Pay from your bank</h3><p>Checkout takes you to Fleeca to pay from your bank account.</p></li>
-        <li class="panel"><span class="panel-n" aria-hidden="true">4</span><h3>We get in touch</h3><p>We text you when your order is ready to collect or on its way.</p></li>
+        ${cfg.payOnline
+          ? `<li class="panel"><span class="panel-n" aria-hidden="true">3</span><h3>Pay from your bank</h3><p>Checkout takes you to Fleeca to pay from your bank account.</p></li>
+        <li class="panel"><span class="panel-n" aria-hidden="true">4</span><h3>We get in touch</h3><p>We text you when your order is ready to collect or on its way.</p></li>`
+          : `<li class="panel"><span class="panel-n" aria-hidden="true">3</span><h3>The shop gets it</h3><p>Your order reaches the shop straight away, with your details and what you chose.</p></li>
+        <li class="panel"><span class="panel-n" aria-hidden="true">4</span><h3>We get in touch</h3><p>We text you about your order, including when it's ready to collect or on its way.</p></li>`}
       </ol>
     </div>
   </section>`;

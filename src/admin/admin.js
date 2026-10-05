@@ -1,7 +1,7 @@
 /* Flickers Comics staff area.
    Staff sign in with a username and password. Stock is loaded from and published to the staff API
    (the Cloudflare Worker in worker/), which does the GitHub commit. No GitHub token is ever in the browser. */
-import { esc, escLines, money, fullTitle, metaLine, slug, coverHTML } from "../js/shared.js";
+import { esc, escLines, money, fullTitle, metaLine, slug, coverHTML } from "../shared.mjs";
 
 const app = document.getElementById("app");
 const API = (app.dataset.api || "").replace(/\/+$/, "");
