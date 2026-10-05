@@ -78,14 +78,14 @@ export function renderStock() {
     <div class="list-head">
       <label class="check"><input type="checkbox" id="selAll"><span id="selAllLabel">Select all</span></label>
       <label class="list-pick">Show <select id="aFilter" class="admin-select">
-        <option value="all">Everything</option><option value="low">Low stock (1 or 2 left)</option><option value="sold">Sold out</option><option value="changed">Unpublished changes</option>
+        <option value="all">Everything</option><option value="low">Low stock (1 or 2 left)</option><option value="sold">Sold out</option><option value="nocover">No cover picture</option><option value="changed">Unpublished changes</option>
       </select></label>
       <label class="list-pick">Sort <select id="aSort" class="admin-select">
         <option value="shop">Shop order</option><option value="title">Title A to Z</option><option value="price-asc">Price, low to high</option><option value="price-desc">Price, high to low</option><option value="stock-asc">Stock, fewest first</option>
       </select></label>
       <span class="hint" id="aShowing" aria-live="polite"></span>
     </div>
-    <p class="hint list-tip">Tip: tick one comic, then hold Shift and tick another to select everything between.</p>
+    <p class="hint list-tip">Tips: drop a picture onto a comic to give it a cover. Tick one comic, then hold Shift and tick another to select everything between.</p>
     <div id="aList"></div>`;
   $("aQ").addEventListener("input", renderList);
   $("aFilter").addEventListener("change", renderList);
@@ -152,6 +152,7 @@ function rowPills(p, c) {
   else if (c.edited.has(p.id)) pills.push(`<span class="pill pill-edit">Edited</span>`);
   if (S.draftFeat.slice(0, 3).includes(p.id)) pills.push(`<span class="pill pill-week">New this week</span>`);
   if (p.stock <= 0) pills.push(`<span class="pill">Sold out</span>`);
+  if (!p.image) pills.push(`<span class="pill pill-void">No cover</span>`);
   return pills.join("");
 }
 const STOCK_SORTS = {
@@ -167,6 +168,7 @@ function visibleList() {
     if (q && ![label(p), p.publisher].join(" ").toLowerCase().includes(q)) return false;
     if (filter === "low") return p.stock >= 1 && p.stock <= 2;
     if (filter === "sold") return p.stock <= 0;
+    if (filter === "nocover") return !p.image;
     if (filter === "changed") return c.edited.has(p.id) || c.added.has(p.id);
     return true;
   });

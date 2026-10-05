@@ -1,4 +1,4 @@
-import { launch, OUT } from "./lib.mjs";
+import { launch, OUT, BASE as SHOP } from "./lib.mjs";
 import fs from "node:fs";
 const BASE = "http://localhost:8080";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -13,6 +13,16 @@ page.on("console", m => { if (m.type() === "error" && !/Failed to load resource/
 await page.goto(BASE + "/admin/", { waitUntil: "networkidle0" });
 await page.type("#u", "owner"); await page.type("#pw", "owner-password-1");
 await page.click("#loginBtn"); await page.waitForSelector("#panel .arow", { timeout: 8000 });
+
+
+// the stock list points out items that have no cover picture
+{
+  const shop = await (await fetch(SHOP + "/data/shop.json")).json(), missing = shop.products.filter(p => !p.image).length;
+  await page.select("#aFilter", "nocover"); await sleep(150);
+  const rows = await page.$$eval(".arow", r => r.map(x => /No cover/.test(x.querySelector(".arow-pills").textContent)));
+  check("'No cover picture' lists exactly the items without a cover", rows.length === missing && rows.every(Boolean), rows.length + " vs " + missing);
+  await page.select("#aFilter", "all"); await sleep(150);
+}
 
 await page.evaluate(() => {
   window.mk = kind => new Promise(res => {
