@@ -5,7 +5,7 @@ import { HttpError, bad } from "./http.js";
 import { fullTitle } from "../../src/shared.mjs";
 
 const unb64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
-export const b64ToText = str => new TextDecoder().decode(unb64(str.replace(/\s/g, "")));
+const b64ToText = str => new TextDecoder().decode(unb64(str.replace(/\s/g, "")));
 
 export async function gh(env, path, opts = {}) {
   const res = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}${path}`, {
@@ -25,7 +25,7 @@ export async function gh(env, path, opts = {}) {
   return res.status === 204 ? null : res.json();
 }
 export const branchName = env => encodeURIComponent(env.GITHUB_BRANCH || "main");
-export const branchRef = env => `/git/ref/heads/${branchName(env)}`;
+const branchRef = env => `/git/ref/heads/${branchName(env)}`;
 
 export async function readStock(env) {
   const ref = await gh(env, branchRef(env));

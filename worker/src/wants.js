@@ -13,8 +13,8 @@ import { fullTitle, norm, seriesKey } from "../../src/shared.mjs";
 const WANT_TTL = 120 * 24 * 3600;
 const WANTS_PER_WINDOW = 8, WINDOW_SECONDS = 600, MAX_WANTS = 600, PAGE = 40;
 const ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const KINDS = ["restock", "series", "request"];
-export const WANT_STATUSES = ["waiting", "contacted"];
+const KINDS = ["restock", "series", "request"];
+const WANT_STATUSES = ["waiting", "contacted"];
 const WANT_ID_RE = /^W-[A-Z2-9]{6}$/;
 
 const clean = (v, max) => String(v ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/\s+/g, " ").trim().slice(0, max);

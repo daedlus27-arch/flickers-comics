@@ -30,15 +30,15 @@ const MAX_LINES = 40, MAX_QTY = 99, ORDERS_PER_WINDOW = 5, LOOKUPS_PER_WINDOW = 
 const clean = (v, max) => String(v ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").trim().slice(0, max);
 const digitsOf = s => String(s || "").replace(/\D/g, "");
 
-export function newOrderId() {
+function newOrderId() {
   const bytes = crypto.getRandomValues(new Uint8Array(6));
   return "FC-" + [...bytes].map(b => ID_ALPHABET[b % 32]).join("");
 }
 
 /* ---------- status ---------- */
-export const STATUSES = ["new", "ready", "done", "cancelled"];
+const STATUSES = ["new", "ready", "done", "cancelled"];
 export const orderStatus = o => o.status || "new";
-export const statusName = o => ({ new: "New", ready: "Ready", done: o.method === "post" ? "Posted" : "Collected", cancelled: "Cancelled" })[orderStatus(o)] || "New";
+const statusName = o => ({ new: "New", ready: "Ready", done: o.method === "post" ? "Posted" : "Collected", cancelled: "Cancelled" })[orderStatus(o)] || "New";
 const isFinished = o => orderStatus(o) === "done" || orderStatus(o) === "cancelled";
 
 /* When an order will be deleted: 14 days after it finished, and never later than 90 days after it was placed. */
@@ -149,7 +149,7 @@ export function orderEmbed(o, cfg = {}) {
   };
 }
 
-export async function postToDiscord(env, order, cfg) {
+async function postToDiscord(env, order, cfg) {
   const role = pingRole(env);
   return webhook(env, {
     wait: true,

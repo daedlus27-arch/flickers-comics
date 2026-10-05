@@ -5,9 +5,9 @@ export const esc = s => String(s ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;
 export const escLines = s => esc(s).replace(/\r?\n/g, "<br>");
 export const money = n => "$" + Math.round(n).toLocaleString("en-US");
 
-export const GRADES = { "NM+": "Near Mint+", "NM": "Near Mint", "NM−": "Near Mint−", "VF": "Very Fine", "FN": "Fine", "VG": "Very Good", "GD": "Good" };
+const GRADES = { "NM+": "Near Mint+", "NM": "Near Mint", "NM−": "Near Mint−", "VF": "Very Fine", "FN": "Fine", "VG": "Very Good", "GD": "Good" };
 
-export const catOf = (cats, key) => (cats || []).find(c => c.key === key) || { key, label: "Other", one: "Item" };
+const catOf = (cats, key) => (cats || []).find(c => c.key === key) || { key, label: "Other", one: "Item" };
 
 /* ---------- names ---------- */
 export function fullTitle(p) {
@@ -34,7 +34,7 @@ export function metaLine(p, cats) {
     default: return catOf(cats, p.cat).one;
   }
 }
-export function stockWord(p) {
+function stockWord(p) {
   if (p.stock <= 0) return "Sold out";
   if (p.stock <= 2) return `Only ${p.stock} left`;
   return `${p.stock} in stock`;
@@ -54,7 +54,7 @@ export const isVariant = p => !!p.variant || (p.badges || []).includes("variant"
 export const searchWords = (p, cats) => [...new Set(wordsOf([fullTitle(p), p.title, p.num, p.vol, p.subtitle, p.variant, p.publisher, catOf(cats, p.cat).label].join(" ")))];
 
 /* the save-for-later heart: drawn once per page (heartSprite) and referenced everywhere else */
-export const HEART_PATH = "M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.7 3.7 4.5 7 4.5c2 0 3.7 1.1 5 3 1.3-1.9 3-3 5-3 3.3 0 5.4 3.2 4.2 6.6-1.7 4.8-9.2 9.4-9.2 9.4z";
+const HEART_PATH = "M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.7 3.7 4.5 7 4.5c2 0 3.7 1.1 5 3 1.3-1.9 3-3 5-3 3.3 0 5.4 3.2 4.2 6.6-1.7 4.8-9.2 9.4-9.2 9.4z";
 export const heartSprite = `<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false"><symbol id="i-heart" viewBox="0 0 24 24"><path d="${HEART_PATH}"/></symbol></svg>`;
 export const heartIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><use href="#i-heart"/></svg>`;
 
@@ -162,7 +162,7 @@ export function stickerHTML(p) {
   if (b.includes("new")) return `<span class="sticker sticker-new" aria-hidden="true">New!</span>`;
   return "";
 }
-export function specRows(p, cats) {
+function specRows(p, cats) {
   const rows = [["Format", catOf(cats, p.cat).one]];
   if (p.publisher) rows.push(["Publisher", p.publisher]);
   if (p.grade) { const code = p.grade.split(" ")[0]; rows.push(["Condition", `${p.grade} (${GRADES[code] || code})`]); }

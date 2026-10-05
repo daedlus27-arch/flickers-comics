@@ -3,7 +3,7 @@ import { esc, money, fullTitle, metaLine, coverHTML, hoursText, hoursShort, DAYS
 
 const X = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
 const SITE_NAME = "Flickers Comics";
-export const BUILD_ID = Date.now().toString(36);
+const BUILD_ID = Date.now().toString(36);
 export const DEFAULT_DESC = "Independent comic shop. Order online, then collect at the counter or have it posted to you.";
 
 /* ---------- page shell ---------- */
@@ -77,7 +77,7 @@ export function header(root, { logo = "assets/flickers-logo.png", series = false
     </div>
   </div>
 </header>
-<nav class="subnav" aria-label="Main (small screens)"><a href="${root}#shop">Shop</a>${seriesLink}<a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>`;
+<nav class="subnav" aria-label="Main (small screens)"><a href="${root}#shop">Shop</a>${seriesLink}<a href="${root}#how">How it works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>`;
 }
 
 export function footer(root, cfg) {
