@@ -61,24 +61,22 @@ const groups = [...counts.entries()]
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(DIST, { recursive: true });
 
-/* ---------- fonts (self-hosted, latin subset) ---------- */
+/* ---------- fonts (self-hosted, latin subset) ----------
+   Archivo is one variable font file covering every weight; the display faces have a single weight each. */
 const FONTS = [
-  ["anton", "Anton", [400]],
-  ["archivo", "Archivo", [400, 500, 600, 700, 800]],
-  ["bangers", "Bangers", [400]],
-  ["permanent-marker", "Permanent Marker", [400]]
+  { family: "Anton", pkg: "@fontsource/anton", file: "anton-latin-400-normal.woff2", weight: "400" },
+  { family: "Archivo", pkg: "@fontsource-variable/archivo", file: "archivo-latin-wght-normal.woff2", weight: "100 900" },
+  { family: "Bangers", pkg: "@fontsource/bangers", file: "bangers-latin-400-normal.woff2", weight: "400" },
+  { family: "Permanent Marker", pkg: "@fontsource/permanent-marker", file: "permanent-marker-latin-400-normal.woff2", weight: "400" }
 ];
 let fontCss = "";
-for (const [pkg, family, weights] of FONTS) {
-  for (const w of weights) {
-    const file = `${pkg}-latin-${w}-normal.woff2`;
-    const src = path.join(ROOT, "node_modules", "@fontsource", pkg, "files", file);
-    if (!fs.existsSync(src)) { console.error(`Missing font file ${file}. Run npm install.`); process.exit(1); }
-    wr(`fonts/${file}`, fs.readFileSync(src));
-    fontCss += `@font-face{font-family:"${family}";font-style:normal;font-weight:${w};font-display:swap;src:url(__ROOT__fonts/${file}) format("woff2")}`;
-  }
+for (const { family, pkg, file, weight } of FONTS) {
+  const src = path.join(ROOT, "node_modules", pkg, "files", file);
+  if (!fs.existsSync(src)) { console.error(`Missing font file ${file}. Run npm install.`); process.exit(1); }
+  wr(`fonts/${file}`, fs.readFileSync(src));
+  fontCss += `@font-face{font-family:"${family}";font-style:normal;font-weight:${weight};font-display:swap;src:url(__ROOT__fonts/${file}) format("woff2")}`;
 }
-const fontPreload = ["fonts/anton-latin-400-normal.woff2", "fonts/archivo-latin-400-normal.woff2", "fonts/archivo-latin-700-normal.woff2"];
+const fontPreload = ["fonts/anton-latin-400-normal.woff2", "fonts/archivo-latin-wght-normal.woff2"];
 
 /* ---------- css, js, static assets ---------- */
 for (const name of ["styles", "admin"]) {

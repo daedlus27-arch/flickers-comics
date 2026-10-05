@@ -18,6 +18,6 @@ export function adminPage({ cfg, fontCss }) {
     title: "Staff area | Flickers Comics", desc: "Flickers Comics staff area.", root: "../", noindex: true, cfg,
     css: ["css/styles.css", "css/admin.css"], fontCss: opts.fontCss, script: "admin/admin.js", body,
     csp: `default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'${apiOrigin}; base-uri 'self'; form-action 'none'`,
-    fontPreload: ["fonts/anton-latin-400-normal.woff2", "fonts/archivo-latin-400-normal.woff2"]
+    fontPreload: ["fonts/anton-latin-400-normal.woff2", "fonts/archivo-latin-wght-normal.woff2"]
   }).replace(/<body data-root="\.\.\/"/, '<body data-root="../" class="adm-body"');
 }
