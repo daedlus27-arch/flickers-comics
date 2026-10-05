@@ -1,5 +1,6 @@
 import { launch } from "./lib.mjs";
 const BASE = process.argv[2] || "http://localhost:8080";
+const TOTAL = (await (await fetch(BASE + "/data/shop.json")).json()).products.length;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const results = [];
 const check = (name, ok, extra = "") => { results.push(!!ok); console.log((ok ? "PASS " : "FAIL ") + name + (extra ? "  [" + extra + "]" : "")); };
@@ -19,7 +20,7 @@ check("a typo finds Batman and says they're close matches", (await shown()) >= 1
 await type("zzzzqq");
 check("nonsense shows the empty message", (await shown()) === 0 && !(await page.$eval("#empty", e => e.hidden)));
 await page.$eval("#clearSearch", b => b.click()); await sleep(150);
-check("'clear the search and filters' resets everything", (await shown()) === 60 && (await page.$eval("#q", e => e.value)) === "");
+check("'clear the search and filters' resets everything", (await shown()) === TOTAL && (await page.$eval("#q", e => e.value)) === "");
 
 // chips
 const total = await shown();

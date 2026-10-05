@@ -5,7 +5,7 @@ const axeSrc = fs.readFileSync(axePath, "utf8");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const browser = await launch();
 let issues = 0;
-const pages = ["/", "/comic/batman-14/", "/nothing-here/", "/admin/"];
+const pages = ["/", "/comic/batman-14/", "/series/", "/series/batman/", "/nothing-here/", "/admin/"];
 for (const w of [320, 360, 390, 768, 1024, 1440, 1920]) {
   for (const path of pages) {
     const page = await browser.newPage();
@@ -26,7 +26,7 @@ for (const [w, scheme] of [[390, "light"], [1280, "dark"]]) {
   await page.setBypassCSP(true);
   await page.setViewport({ width: w, height: 900, isMobile: w < 500, hasTouch: w < 500 });
   await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: scheme }]);
-  for (const path of ["/", "/comic/batman-14/", "/nothing-here/"]) {
+  for (const path of ["/", "/comic/batman-14/", "/series/", "/series/batman/", "/nothing-here/"]) {
     await page.goto(BASE + path, { waitUntil: "networkidle0" });
     await page.evaluate(axeSrc);
     const v = await page.evaluate(async () => (await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] }, resultTypes: ["violations"] })).violations.map(x => x.id + ": " + x.nodes.slice(0, 3).map(n => n.target.join(" ") + " " + ((n.any[0] || n.all[0] || {}).message || "").slice(0, 100)).join(" ; ")));

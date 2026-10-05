@@ -161,7 +161,10 @@ kbd{white-space:nowrap;padding:1px 6px;border:1px solid var(--rule);border-botto
 .sales-table th,.sales-table td{padding:8px 10px;border-bottom:1px solid var(--rule);text-align:left}
 .sales-table thead th{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
 .sales-table tbody th{font-weight:700}
-.sales-bar{display:flex;align-items:center;gap:10px;min-width:200px}
-.sales-bar .bar{flex:none;display:block;height:14px;min-width:2px;border:1.5px solid var(--ink);border-radius:2px;background:var(--yellow)}
+.sales-bar{display:flex;align-items:center;gap:10px}
+.sales-bar .track{flex:0 0 min(160px,38%);display:block}
+.sales-bar .bar{display:block;height:14px;border:1.5px solid var(--ink);border-radius:2px;background:var(--yellow)}
+.sales-table tbody th{white-space:nowrap}
 .sales-timing{margin-bottom:6px}
-@media (max-width:640px){.sales-bar{min-width:0;flex-wrap:wrap}.sales-table th,.sales-table td{padding:8px 6px}}
+.sales-bar>span:last-child{white-space:nowrap}
+@media (max-width:640px){.sales-table th,.sales-table td{padding:8px 6px}.sales-bar{gap:6px}.sales-bar .track{flex-basis:30px}}

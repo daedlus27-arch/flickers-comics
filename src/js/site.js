@@ -263,7 +263,7 @@ function renderLines() {
   $("drawerDealName").textContent = dealName(CONFIG.deal);
   $("drawerDeal").textContent = "−" + money(deal.discount);
   $("drawerNudge").hidden = !(dealOn(CONFIG.deal) && count > 0 && deal.toGo > 0);
-  $("drawerNudge").textContent = deal.toGo > 0 ? `Add ${deal.toGo} more comic${deal.toGo === 1 ? "" : "s"} and ${dealWords(CONFIG.deal)} free.` : "";
+  $("drawerNudge").textContent = deal.toGo > 0 ? `Add ${deal.toGo} more comic${deal.toGo === 1 ? "" : "s"} ${deal.discount ? "for another free one" : `and ${dealWords(CONFIG.deal)} free`}.` : "";
   $("lines").innerHTML = entries.map(([id, q]) => {
     const p = byId[id], t = fullTitle(p);
     return `<li class="line">

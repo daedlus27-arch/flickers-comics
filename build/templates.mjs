@@ -468,6 +468,7 @@ ${header(root, { series: true })}
       <p class="section-sub">${esc(seriesFacts(s))}</p>
       <p class="series-follow"><button type="button" class="btn btn-small" data-want="series" data-id="${esc(s.items[0].id)}" hidden>Follow ${esc(s.title)}</button> <span class="hint" data-want-only hidden>We'll let you know when a new issue arrives.</span></p>
     </div>
+    <h2 class="sr-only">The issues</h2>
     <div class="grid">${s.items.map((p, i) => cardHTML(p, ctx, i)).join("\n")}</div>
   </div>
 </main>

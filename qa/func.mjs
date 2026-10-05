@@ -1,6 +1,7 @@
 // Functional checks of the storefront in a real browser. Network calls to the live order service are intercepted.
 import { launch } from "./lib.mjs";
 const BASE = process.argv[2] || "http://localhost:8080";
+const TOTAL = (await (await fetch(BASE + "/data/shop.json")).json()).products.length; // however many comics are in the shop right now
 const browser = await launch();
 const results = [];
 const check = (name, ok, extra = "") => { results.push({ name, ok: !!ok, extra }); console.log((ok ? "PASS " : "FAIL ") + name + (extra ? "  [" + extra + "]" : "")); };
@@ -37,7 +38,7 @@ async function newPage(width = 1280, height = 900) {
   check("sorted low to high", prices.every((p, i) => i === 0 || p >= prices[i - 1]), prices.slice(0, 5).join(","));
   check("page did not jump on load", (await page.evaluate(() => scrollY)) < 50, "scrollY=" + await page.evaluate(() => scrollY));
   await page.click('.divider[data-group="all"]'); await sleep(200);
-  check("Everything tab shows all 60", (await shown()) === 60);
+  check("Everything tab shows every comic", (await shown()) === TOTAL);
   check("address bar cleared of shelf", !(await page.url()).includes("shelf="), page.url());
   await page.type("#q", "batman"); await sleep(300);
   check("search narrows and goes in the address", (await shown()) >= 1 && (await shown()) < 10 && page.url().includes("q=batman"), `shown=${await shown()} url=${page.url()}`);
@@ -49,7 +50,7 @@ async function newPage(width = 1280, height = 900) {
   // clicking card text does not change the filter (regression)
   await page.evaluate(() => document.activeElement.blur());
   await page.$eval(".card .price-tag", el => el.click()); await sleep(150);
-  check("clicking a price tag does not filter the shelf", (await shown()) === 60);
+  check("clicking a price tag does not filter the shelf", (await shown()) === TOTAL);
   check("no script errors on the home page", page.errors.length === 0, page.errors.join(" | "));
   await page.close();
 }

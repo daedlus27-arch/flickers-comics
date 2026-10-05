@@ -524,7 +524,7 @@ legend{margin-bottom:12px;padding:0;font-family:var(--font-display);font-size:24
 .deal-line{color:var(--ok);font-weight:700}
 .deal-line strong,.deal-line span:last-child{color:var(--ok)}
 .deal-nudge{margin:0;padding:8px 12px;border:2px dashed var(--ink);border-radius:4px;font-size:14px;font-weight:700}
-.deal-note{margin:0;font-size:14px;color:var(--ink-soft)}
+.deal-note{flex:0 0 100%;margin:0;font-size:14px;color:var(--ink-soft)}
 .deal-note b{color:var(--ok)}
 .strip-deal{font-weight:800}
 

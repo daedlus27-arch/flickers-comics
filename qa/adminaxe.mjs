@@ -29,6 +29,8 @@ for (const scheme of ["light", "dark"]) {
   await run("orders");
   await page.$eval('[data-tab="wanted"]', b => b.click()); await page.waitForSelector(".want"); await sleep(300);
   await run("wanted");
+  await page.$eval('[data-tab="sales"]', b => b.click()); await page.waitForSelector(".stats, .admin-empty"); await sleep(300);
+  await run("sales");
   await page.$eval('[data-tab="staff"]', b => b.click()); await sleep(600);
   await run("staff");
   await page.$eval('[data-tab="account"]', b => b.click()); await sleep(300);

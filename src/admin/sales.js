@@ -5,14 +5,19 @@ import { $, api, say } from "./core.js";
 
 const WEEK_CHOICES = [[4, "Last 4 weeks"], [8, "Last 8 weeks"], [12, "Last 12 weeks"], [26, "Last 6 months"], [52, "Last year"]];
 const weekOf = iso => new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-const lasted = h => (h < 1 ? `${Math.max(1, Math.round(h * 60))} minutes` : h < 48 ? `${h < 10 ? h.toFixed(1) : Math.round(h)} hours` : `${(h / 24).toFixed(1)} days`);
+const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const lasted = h => {
+  if (h < 1) return count(Math.max(1, Math.round(h * 60)), "minute");
+  if (h < 48) return h < 10 && Math.round(h * 10) % 10 ? `${h.toFixed(1)} hours` : count(Math.round(h), "hour");
+  return `${(h / 24).toFixed(1)} days`;
+};
 const stat = (label, value, note = "") => `<div class="stat"><span class="stat-label">${esc(label)}</span><b>${esc(value)}</b>${note ? `<span class="stat-note">${esc(note)}</span>` : ""}</div>`;
 
 function reportHTML(r) {
   const t = r.totals, top = Math.max(1, ...r.weeks.map(w => w.revenue));
   if (!t.orders && !t.cancelled) return `<p class="admin-empty">No orders in this period yet. Sales appear here as customers order.</p>`;
   const rows = r.weeks.map(w => `<tr><th scope="row">${weekOf(w.start)}</th>
-      <td class="sales-bar"><span class="bar" style="width:${Math.round(w.revenue / top * 100)}%" aria-hidden="true"></span><span>${money(w.revenue)}</span></td>
+      <td class="sales-bar"><span class="track" aria-hidden="true">${w.revenue ? `<span class="bar" style="width:${Math.max(2, Math.round(w.revenue / top * 100))}%"></span>` : ""}</span><span>${money(w.revenue)}</span></td>
       <td>${w.orders}</td><td>${w.units}</td><td>${w.discount ? money(w.discount) : "–"}</td></tr>`).join("");
   const best = r.best.length ? `<table class="sales-table"><caption>Best sellers (copies sold)</caption>
       <thead><tr><th scope="col">Comic</th><th scope="col">Copies</th><th scope="col">Takings</th></tr></thead>
