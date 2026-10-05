@@ -584,6 +584,14 @@ try {
   // The pre-rendered pages still read fine without it; only the cart is unavailable.
   const btn = $("cartBtn");
   if (btn) btn.disabled = true;
-  document.querySelectorAll(".add").forEach(b => { b.disabled = true; });
+  document.querySelectorAll(".add, [data-qv=\"add\"]").forEach(b => { b.disabled = true; });
+  const note = document.createElement("p");
+  note.className = "page-note"; note.setAttribute("role", "alert");
+  note.append("We couldn't load the shop's live stock, so ordering is paused. Check your connection, then ");
+  const retry = document.createElement("button");
+  retry.type = "button"; retry.textContent = "Try again";
+  retry.addEventListener("click", () => location.reload());
+  note.append(retry);
+  document.body.prepend(note);
   console.error("Flickers Comics: couldn't load shop data", e);
 }

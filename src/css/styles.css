@@ -84,6 +84,8 @@ h1,h2,h3{text-wrap:balance}
 
 /* ---------- top strip + header ---------- */
 .topstrip{background:var(--yellow);color:var(--on-yellow);font-size:13.5px;font-weight:600}
+.page-note{margin:0;padding:10px 16px;background:var(--kraft);color:var(--ink-fixed);font-size:14px;font-weight:700;text-align:center}
+.page-note button{margin-left:10px;padding:4px 12px;border:2px solid var(--ink-fixed);border-radius:4px;background:#FBFAF6;color:var(--ink-fixed);font-weight:800;font-size:13.5px}
 .topstrip-in{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 18px;padding-block:7px}
 .status{display:inline-flex;align-items:center;gap:8px;font-weight:800}
 .status-dot{width:9px;height:9px;border-radius:50%;background:var(--ink-fixed);flex:none}

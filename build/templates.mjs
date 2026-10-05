@@ -38,6 +38,7 @@ ${extraHead}
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, "\\u003c")}</script>` : ""}
 </head>
 <body data-root="${root}" data-build="${BUILD_ID}">
+${script === "js/site.js" ? `<noscript><p class="page-note">JavaScript is off, so you can browse but not order. Turn it on to add comics to a cart.</p></noscript>` : ""}
 ${body}
 ${script ? `<script type="module" src="${root}${script}"></script>` : ""}
 </body>
