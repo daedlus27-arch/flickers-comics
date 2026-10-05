@@ -96,8 +96,7 @@ h1,h2,h3{text-wrap:balance}
 .site-header{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:var(--brand-bar);color:var(--brand-fg);border-bottom:1px solid #000}
 .header-in{display:flex;align-items:center;gap:20px;min-height:var(--header-h);padding-block:8px}
 .logo-link{display:block;flex:0 1 auto;min-width:0;line-height:0}
-.logo{display:block;height:clamp(36px,7vw,54px);width:auto;max-width:100%}
-@media (max-width:340px){.logo{height:30px}}
+.logo{display:block;width:min(100%,calc(clamp(36px,7vw,54px) * 6.1538));height:auto}
 .header-actions{margin-left:auto;display:flex;align-items:center;gap:24px;flex:none}
 .nav{display:flex;gap:22px}
 .nav a{padding-block:6px;border-bottom:2px solid transparent;color:var(--brand-fg);font-weight:700;font-size:15px;text-decoration:none}
@@ -350,7 +349,8 @@ dialog::backdrop{background:var(--scrim)}
 .steps li.is-done::before,.steps li.is-current::before{background:var(--ink)}
 .steps li.is-done::after{background:var(--ink)}
 .steps li.is-current::after{background:var(--yellow)}
-.footer-track{margin-top:8px!important}
+.footer-track{display:grid;justify-items:start;margin-top:4px!important}
+.footer-track .link-btn{padding:12px 0}
 .chips{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px}
 .chip{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border:2px solid var(--ink);border-radius:999px;background:var(--paper-raised);color:var(--ink);font-weight:700;font-size:14px;line-height:1.2;cursor:pointer}
 .chip:hover{background:var(--kraft)}
