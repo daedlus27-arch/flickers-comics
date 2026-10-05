@@ -90,6 +90,26 @@ or remove them there. Nobody is texted automatically; staff make the call. Reque
 
 Customers can share a shelf with a link: `/?shelf=DC+Comics&sort=price-asc`. Pressing <kbd>/</kbd> jumps to the search box.
 
+**Buy two, get one free:** every comic counts. Lined up from dearest to cheapest and taken three at a time, the cheapest of each three
+is free (so 6 comics make 2 free ones). The cart nudges ("Add 1 more comic and the cheapest one is free"), checkout and the
+confirmation show the saving, and the Worker works the discount out itself, so a browser can't change it. The Discord post, the
+staff Orders list, the spreadsheet and the customer's tracking page all show it. Change or switch it off in `data/config.json`:
+
+```json
+"deal": { "enabled": true, "buy": 2, "free": 1 }
+```
+
+**Low-stock alerts:** when an order leaves a comic with its last copy, or none, a message goes to the orders Discord channel
+(pinging the staff role if one is set) so you can reorder before it's gone.
+
+**Series pages:** a title with two or more issues on the shelves gets a page listing every issue in number order (`/series/batman/`),
+a "Series" link in the menu, a list of all series, a "See the whole series" link from each issue, and a Follow button. They appear
+on their own as you add issues; nothing to set up.
+
+**Sales** (staff area → **Sales**, owner only): takings, orders, copies sold, average order, how much the deal gave away, best sellers,
+takings by week and how long orders take to hand over, for the last 4 weeks up to a year. It's built from a small record kept for each
+order (what was bought and when, never who by) that outlives the order itself, so the history lasts after finished orders are deleted.
+
 ## Working on the site
 
 Needs [Node.js](https://nodejs.org) 20 or newer.

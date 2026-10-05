@@ -17,7 +17,9 @@ import { adjustStock } from "./github.js";
 import { loadShop, shopConfig, siteBase } from "./shop.js";
 import { escMd, cut, pingRole, webhook } from "./discord.js";
 import { announceRestocks } from "./wants.js";
-import { fullTitle, money, hoursText } from "../../src/shared.mjs";
+import { announceLowStock } from "./alerts.js";
+import { recordSale } from "./sales.js";
+import { fullTitle, money, hoursText, dealDiscount, dealName } from "../../src/shared.mjs";
 
 const ORDER_TTL = 90 * 24 * 3600;
 const ARCHIVE_TTL = 14 * 24 * 3600;
@@ -95,10 +97,11 @@ export function buildOrder(raw, shop, { test = false } = {}) {
     items.push({ id, title: fullTitle(p), qty, price: p.price });
   }
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const { discount } = dealDiscount(items, cfg.deal); // the free comics are worked out here, never taken from the browser
   const postage = method === "post" ? Number(cfg.postage) || 0 : 0;
   return {
     id: newOrderId(), placedAt: new Date().toISOString(), name, phone, method, collectDate, address,
-    notes: clean(raw.notes, 500), items, subtotal, postage, total: subtotal + postage, paid: false, test
+    notes: clean(raw.notes, 500), items, subtotal, ...(discount ? { discount, deal: dealName(cfg.deal) } : {}), postage, total: subtotal - discount + postage, paid: false, test
   };
 }
 
@@ -129,6 +132,7 @@ export function orderEmbed(o, cfg = {}) {
       : { name: "Post to", value: cut(escMd(o.address), 1000) },
     { name: "Items", value: items || "—" },
     { name: "Subtotal", value: money(o.subtotal), inline: true },
+    ...(o.discount ? [{ name: o.deal || "Deal", value: "−" + money(o.discount), inline: true }] : []),
     { name: o.method === "post" ? "Postage" : "Collection", value: o.postage ? money(o.postage) : "Free", inline: true },
     { name: "Total", value: `**${money(o.total)}**`, inline: true }
   ];
@@ -185,9 +189,11 @@ export async function placeOrder(env, raw, ip) {
   // Take the comics off the shelf. This checks the real stock in GitHub, so two customers can't both get the last copy.
   // If GitHub can't be reached (say the Worker's token has expired) the order is still accepted and flagged for staff to adjust by hand.
   order.stock = "manual";
+  let shelf = null; // the stock before and after, for the low-stock alert
   try {
-    await adjustStock(env, order.items.map(i => [i.id, -i.qty]), `Order ${order.id}: ${order.items.reduce((s, i) => s + i.qty, 0)} comic${order.items.reduce((s, i) => s + i.qty, 0) === 1 ? "" : "s"} taken off the shelf`);
+    const taken = await adjustStock(env, order.items.map(i => [i.id, -i.qty]), `Order ${order.id}: ${order.items.reduce((s, i) => s + i.qty, 0)} comic${order.items.reduce((s, i) => s + i.qty, 0) === 1 ? "" : "s"} taken off the shelf`);
     order.stock = "held";
+    shelf = taken;
   } catch (e) {
     if (e instanceof HttpError && e.status === 409) throw e; // really out of stock
     console.error("Couldn't update the stock for an order");
@@ -201,7 +207,9 @@ export async function placeOrder(env, raw, ip) {
   record.discord = sent.ok ? "sent" : `failed: ${sent.reason}`;
   if (sent.id) record.discordId = sent.id;
   await env.USERS.put(key, JSON.stringify(record), { expirationTtl: ORDER_TTL });
-  return { orderId: order.id, subtotal: order.subtotal, postage: order.postage, total: order.total, paid: false };
+  await recordSale(env, record).catch(() => {}); // the customer-free record the sales report is built from
+  if (shelf) await announceLowStock(env, shelf.before, shelf.products).catch(() => {}); // after the order itself is posted, say what's running out
+  return { orderId: order.id, subtotal: order.subtotal, discount: order.discount || 0, postage: order.postage, total: order.total, paid: false };
 }
 
 /* One page of orders, newest first (the keys sort that way); `cursor` fetches the next page. Kept small because each read is a KV call
@@ -241,7 +249,7 @@ export async function lookupOrder(env, raw, ip) {
   if (!same) throw bad(404, "We couldn't find an order with that number and phone number. Check them and try again."); // the same answer whether the number or the phone is wrong
   return {
     id: o.id, state: orderStatus(o), statusLabel: statusName(o), method: o.method, collectDate: o.collectDate || null, paid: !!o.paid,
-    total: o.total, postage: o.postage, placedAt: o.placedAt, items: o.items.map(i => ({ title: i.title, qty: i.qty }))
+    total: o.total, discount: o.discount || 0, deal: o.deal || "", postage: o.postage, placedAt: o.placedAt, items: o.items.map(i => ({ title: i.title, qty: i.qty }))
   };
 }
 
@@ -269,7 +277,7 @@ export async function updateOrder(env, id, patch, user) {
       try { const r = await adjustStock(env, lines, `Order ${o.id} cancelled: comics put back on the shelf`); o.stock = "released"; await announceRestocks(env, r.before, r.products).catch(() => {}); }
       catch (e) { o.stock = "restore-failed"; warnings.push("The order was cancelled, but the comics couldn't be put back in stock automatically. Add them back under Stock."); }
     } else if (prev === "cancelled" && next !== "cancelled" && o.stock === "released") {
-      try { await adjustStock(env, lines.map(([i, q]) => [i, -q]), `Order ${o.id} reopened: comics taken off the shelf again`); o.stock = "held"; }
+      try { const r = await adjustStock(env, lines.map(([i, q]) => [i, -q]), `Order ${o.id} reopened: comics taken off the shelf again`); o.stock = "held"; await announceLowStock(env, r.before, r.products).catch(() => {}); }
       catch (e) {
         if (e instanceof HttpError && e.status === 409) throw bad(409, `Can't reopen this order: ${e.message}`);
         throw bad(502, "Couldn't take the comics off the shelf again just now. Try again in a moment.");
@@ -282,6 +290,7 @@ export async function updateOrder(env, id, patch, user) {
 
   o.history = [...(o.history || []), ...changes.map(change => ({ at: new Date().toISOString(), by: user.username, change }))].slice(-30);
   await env.USERS.put(key, JSON.stringify(o), { expirationTtl: ttlSeconds(o) });
+  await recordSale(env, o).catch(() => {});
 
   // keep the Discord post in step, and nudge staff when an order is ready
   let discord = "skipped";

@@ -1,5 +1,5 @@
 /* HTML templates for the pre-rendered site. Everything here runs at build time. */
-import { esc, money, fullTitle, metaLine, coverHTML, hoursText, hoursShort, DAYS, isVariant, heartSprite, heartIcon, stickerHTML, detailHTML } from "../src/shared.mjs";
+import { esc, money, fullTitle, metaLine, coverHTML, hoursText, hoursShort, DAYS, isVariant, heartSprite, heartIcon, stickerHTML, detailHTML, dealOn, dealName } from "../src/shared.mjs";
 
 const X = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
 const SITE_NAME = "Flickers Comics";
@@ -51,17 +51,18 @@ function topStrip(cfg) {
   return `<section class="topstrip" aria-label="Opening hours and postage">
   <div class="wrap topstrip-in">
     <span class="status" id="stripStatus"><span class="status-dot" aria-hidden="true"></span><span id="stripStatusText">Open every day, ${hoursText(cfg)}</span></span>
-    <span class="strip-extra"><span>Collect in store for free</span><span>Postage ${money(cfg.postage)}</span></span>
+    <span class="strip-extra"><span>Collect in store for free</span><span>Postage ${money(cfg.postage)}</span>${dealOn(cfg.deal) ? `<span class="strip-deal">${esc(dealName(cfg.deal))}</span>` : ""}</span>
   </div>
 </section>`;
 }
 
-export function header(root, { logo = "assets/flickers-logo.png" } = {}) {
+export function header(root, { logo = "assets/flickers-logo.png", series = false } = {}) {
+  const seriesLink = series ? `<a href="${root}series/">Series</a>` : "";
   return `<header class="site-header">
   <div class="wrap header-in">
     <a class="logo-link" href="${root || "./"}"><img class="logo" src="${root}${logo}" alt="Flickers Comics" width="640" height="104"></a>
     <div class="header-actions">
-      <nav class="nav" aria-label="Main"><a href="${root}#shop">Shop</a><a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>
+      <nav class="nav" aria-label="Main"><a href="${root}#shop">Shop</a>${seriesLink}<a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>
       <button type="button" class="saved-btn" id="savedBtn" aria-haspopup="dialog" hidden>
         ${heartIcon}
         <span class="saved-word">Saved</span>
@@ -76,7 +77,7 @@ export function header(root, { logo = "assets/flickers-logo.png" } = {}) {
     </div>
   </div>
 </header>
-<nav class="subnav" aria-label="Main (small screens)"><a href="${root}#shop">Shop</a><a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>`;
+<nav class="subnav" aria-label="Main (small screens)"><a href="${root}#shop">Shop</a>${seriesLink}<a href="${root}#how">How ordering works</a><a href="${root}#hours">Hours</a><button type="button" data-track hidden>Track order</button></nav>`;
 }
 
 export function footer(root, cfg) {
@@ -112,6 +113,8 @@ function dialogs(cfg) {
   </div>
   <div class="drawer-foot" id="drawerFoot">
     <div class="r-line"><span>Subtotal</span><strong id="drawerSub">$0</strong></div>
+    <div class="r-line deal-line" id="drawerDealLine" hidden><span id="drawerDealName">Deal</span><strong id="drawerDeal">−$0</strong></div>
+    <p class="deal-nudge" id="drawerNudge" hidden></p>
     <p class="hint">Choose collection or postage at checkout.</p>
     <p class="share-cart"><button type="button" class="link-btn" data-share-cart>Copy a link to this cart</button> <span class="hint">Send it to a friend and they get the same comics in their cart.</span></p>
     <button type="button" class="btn btn-yellow btn-block" id="checkoutBtn">Checkout</button>
@@ -192,6 +195,7 @@ function dialogs(cfg) {
           <h3 id="sumTitle">Order summary</h3>
           <ul class="sum-list" id="sumList"></ul>
           <div class="r-line"><span>Subtotal</span><span id="sumSub">$0</span></div>
+          <div class="r-line deal-line" id="sumDealLine" hidden><span id="sumDealName">Deal</span><span id="sumDeal">−$0</span></div>
           <div class="r-line"><span id="sumShipLabel">Collection</span><span id="sumShip">Free</span></div>
           <div class="r-line r-total"><span>Total</span><span id="sumTotal">$0</span></div>
         </aside>
@@ -301,7 +305,7 @@ export function homePage(ctx) {
   const cards = products.map((p, i) => cardHTML(p, ctx, i)).join("\n");
   return `<a class="skip" href="#shop">Skip to the shelves</a>
 ${topStrip(cfg)}
-${header(root)}
+${header(root, { series: ctx.hasSeries })}
 <main id="top">
   <section class="hero" aria-labelledby="heroTitle">
     <div class="wrap hero-in">
@@ -317,6 +321,7 @@ ${header(root)}
           <li><strong>Open every day</strong> ${hoursText(cfg)}</li>
           <li><strong>Collect in store</strong> free</li>
           <li><strong>Postage</strong> ${money(cfg.postage)}</li>
+          ${dealOn(cfg.deal) ? `<li><strong>${esc(dealName(cfg.deal))}</strong> cheapest one's on us</li>` : ""}
         </ul>
       </div>
       ${hero.length ? `<div class="rack" id="rack" role="group" aria-label="New this week">${burst}${fan}<span class="rack-sticker" aria-hidden="true">New this week!</span></div>` : ""}
@@ -425,11 +430,12 @@ export function comicPage(p, ctx, related) {
   const t = fullTitle(p);
   return `<a class="skip" href="#item">Skip to the comic</a>
 ${topStrip(cfg)}
-${header(root)}
+${header(root, { series: ctx.hasSeries })}
 <main id="item" class="item-page">
   <div class="wrap">
     <nav aria-label="Breadcrumb"><ol class="crumbs"><li><a href="${root}">Home</a></li><li><a href="${root}#shop">The shelves</a></li><li aria-current="page">${esc(t)}</li></ol></nav>
     ${detailHTML(p, cats, { imgBase: root, cover: { priority: true, sizes: "(min-width: 640px) 340px, 260px" }, buy: `<div class="qv-buy" data-buy="${esc(p.id)}">${p.stock <= 0 ? `<p class="qv-limit">This one is sold out.</p>` : ""}</div>` })}
+  ${ctx.seriesOf && ctx.seriesOf[p.id] ? `<p class="series-link">One of ${plural(ctx.seriesOf[p.id].items.length, "issue")} of <b>${esc(ctx.seriesOf[p.id].title)}</b> in the shop. <a href="${seriesUrl(root, ctx.seriesOf[p.id])}">See the whole series</a></p>` : ""}
   </div>
 </main>
 ${related.length ? `<section class="more" aria-labelledby="moreTitle"><div class="wrap">
@@ -440,10 +446,69 @@ ${footer(root, cfg)}
 ${dialogs(cfg)}`;
 }
 
+/* ---------- series: every issue of a title on one page ---------- */
+const plural = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
+export const seriesUrl = (root, s) => `${root}series/${s.slug}/`;
+function seriesFacts(s) {
+  const inStock = s.items.filter(p => p.stock > 0), from = Math.min(...s.items.map(p => p.price));
+  return `${plural(s.items.length, "issue")} · ${inStock.length ? `${inStock.length} in stock` : "all sold out"} · from ${money(from)}`;
+}
+
+export function seriesPage(s, ctx) {
+  const { cfg, root } = ctx;
+  return `<a class="skip" href="#series">Skip to the issues</a>
+${topStrip(cfg)}
+${header(root, { series: true })}
+<main id="series" class="item-page">
+  <div class="wrap">
+    <nav aria-label="Breadcrumb"><ol class="crumbs"><li><a href="${root}">Home</a></li><li><a href="${root}series/">Series</a></li><li aria-current="page">${esc(s.title)}</li></ol></nav>
+    <div class="series-head">
+      <p class="eyebrow">Series</p>
+      <h1 class="section-title">${esc(s.title)}</h1>
+      <p class="section-sub">${esc(seriesFacts(s))}</p>
+      <p class="series-follow"><button type="button" class="btn btn-small" data-want="series" data-id="${esc(s.items[0].id)}" hidden>Follow ${esc(s.title)}</button> <span class="hint" data-want-only hidden>We'll let you know when a new issue arrives.</span></p>
+    </div>
+    <div class="grid">${s.items.map((p, i) => cardHTML(p, ctx, i)).join("\n")}</div>
+  </div>
+</main>
+${footer(root, cfg)}
+${dialogs(cfg)}`;
+}
+
+export function seriesIndexPage(list, ctx) {
+  const { cfg, root } = ctx;
+  const tiles = list.map(s => {
+    const lead = s.items.find(p => p.image) || s.items[0], t = `${s.title}, ${plural(s.items.length, "issue")}`;
+    return `<article class="card">
+    <a class="cover-btn" href="${seriesUrl(root, s)}" aria-label="${esc(t)}. See the series">${coverHTML(lead, { imgBase: root })}</a>
+    <div class="card-body">
+      <p class="meta">${esc(plural(s.items.length, "issue"))}</p>
+      <h2 class="title"><a href="${seriesUrl(root, s)}"><span class="clamp">${esc(s.title)}</span></a></h2>
+      <p class="stock">${esc(seriesFacts(s).split(" · ").slice(1).join(" · "))}</p>
+    </div>
+  </article>`;
+  }).join("\n");
+  return `<a class="skip" href="#series">Skip to the series</a>
+${topStrip(cfg)}
+${header(root, { series: true })}
+<main id="series" class="item-page">
+  <div class="wrap">
+    <nav aria-label="Breadcrumb"><ol class="crumbs"><li><a href="${root}">Home</a></li><li aria-current="page">Series</li></ol></nav>
+    <div class="series-head">
+      <h1 class="section-title">Series</h1>
+      <p class="section-sub">Titles with more than one issue on the shelves, all in one place.</p>
+    </div>
+    <div class="grid">${tiles}</div>
+  </div>
+</main>
+${footer(root, cfg)}
+${dialogs(cfg)}`;
+}
+
 export function notFoundPage(ctx) {
   const { cfg, root } = ctx;
   return `${topStrip(cfg)}
-${header(root)}
+${header(root, { series: ctx.hasSeries })}
 <main>
   <div class="wrap lost">
     <p class="eyebrow">Error 404</p>

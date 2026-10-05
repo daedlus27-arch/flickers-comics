@@ -1,7 +1,7 @@
 /* Flickers Comics storefront.
    The shelves and comic pages are rendered at build time (see build/). This script adds the cart,
    quick view, checkout, search and filters on top. Stock and prices come from data/shop.json. */
-import { searchItems, searchWords, norm, isVariant, heartIcon, detailHTML, esc, escLines, money, fullTitle, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "../shared.mjs";
+import { searchItems, searchWords, norm, isVariant, heartIcon, detailHTML, dealDiscount, dealOn, dealName, esc, escLines, money, fullTitle, hLabel, hoursText, hoursShort, DAYS, coverHTML } from "../shared.mjs";
 
 const root = document.body.dataset.root || "";
 const $ = id => document.getElementById(id);
@@ -96,6 +96,8 @@ const saveCart = () => store.set(CART_KEY, cart);
 const cartQty = id => cart[id] || 0;
 const cartCount = () => Object.values(cart).reduce((a, b) => a + b, 0);
 const cartSubtotal = () => Object.entries(cart).reduce((s, [id, q]) => s + byId[id].price * q, 0);
+const cartDeal = () => dealDiscount(Object.entries(cart).map(([id, qty]) => ({ price: byId[id].price, qty })), CONFIG.deal);
+const dealWords = d => (d.free === 1 ? "the cheapest one is" : `the cheapest ${d.free} are`);
 function addToCart(id, n = 1) {
   const p = byId[id];
   if (!p || p.stock <= 0) return false;
@@ -230,7 +232,7 @@ function buyCore(p, st) {
 }
 function buyHTML(p, st) {
   const live = wantsOn();
-  return buyCore(p, st) + `<div class="buy-extras">${p.stock <= 0 && live ? `<button type="button" class="btn btn-small btn-yellow" data-want="restock" data-id="${esc(p.id)}">Tell me when it's back</button>` : ""}<button type="button" class="link-btn save-link" data-save="${esc(p.id)}" aria-pressed="${isSaved(p.id)}">${heartIcon}Save for later</button>${live ? `<button type="button" class="link-btn" data-want="series" data-id="${esc(p.id)}">Follow ${esc(p.title)}</button>` : ""}</div>`;
+  return buyCore(p, st) + (p.stock > 0 && dealOn(CONFIG.deal) ? `<p class="deal-note"><b>${esc(dealName(CONFIG.deal))}.</b> In a cart of ${CONFIG.deal.buy + CONFIG.deal.free}, ${dealWords(CONFIG.deal)} free.</p>` : "") + `<div class="buy-extras">${p.stock <= 0 && live ? `<button type="button" class="btn btn-small btn-yellow" data-want="restock" data-id="${esc(p.id)}">Tell me when it's back</button>` : ""}<button type="button" class="link-btn save-link" data-save="${esc(p.id)}" aria-pressed="${isSaved(p.id)}">${heartIcon}Save for later</button>${live ? `<button type="button" class="link-btn" data-want="series" data-id="${esc(p.id)}">Follow ${esc(p.title)}</button>` : ""}</div>`;
 }
 function renderPageBuy() { if (pageBuyEl && byId[pageState.id]) pageBuyEl.innerHTML = buyHTML(byId[pageState.id], pageState); }
 
@@ -256,6 +258,12 @@ function renderLines() {
   $("cartEmpty").hidden = entries.length > 0;
   $("drawerFoot").hidden = entries.length === 0;
   $("drawerSub").textContent = money(cartSubtotal());
+  const deal = cartDeal(), count = cartCount();
+  $("drawerDealLine").hidden = !deal.discount;
+  $("drawerDealName").textContent = dealName(CONFIG.deal);
+  $("drawerDeal").textContent = "−" + money(deal.discount);
+  $("drawerNudge").hidden = !(dealOn(CONFIG.deal) && count > 0 && deal.toGo > 0);
+  $("drawerNudge").textContent = deal.toGo > 0 ? `Add ${deal.toGo} more comic${deal.toGo === 1 ? "" : "s"} and ${dealWords(CONFIG.deal)} free.` : "";
   $("lines").innerHTML = entries.map(([id, q]) => {
     const p = byId[id], t = fullTitle(p);
     return `<li class="line">
@@ -274,7 +282,7 @@ function renderLines() {
   }).join("");
 }
 function renderCartUI() {
-  const n = cartCount(), sub = cartSubtotal();
+  const n = cartCount(), sub = cartSubtotal() - cartDeal().discount;
   $("cartCount").textContent = n;
   $("cartTotal").textContent = money(sub);
   $("cartBtn").setAttribute("aria-label", `Cart: ${n} ${n === 1 ? "item" : "items"}, ${money(sub)}`);
@@ -305,11 +313,14 @@ function bumpCart() { const b = $("cartBtn"); b.classList.remove("bump"); void b
 const form = $("coForm");
 const F = { name: $("f-name"), phone: $("f-phone"), date: $("f-date"), address: $("f-address"), notes: $("f-notes") };
 const getMethod = () => (form.querySelector('input[name="method"]:checked') || {}).value || "collect";
-function totals() { const sub = cartSubtotal(), post = getMethod() === "post" ? CONFIG.postage : 0; return { sub, post, total: sub + post }; }
+function totals() { const sub = cartSubtotal(), discount = cartDeal().discount, post = getMethod() === "post" ? CONFIG.postage : 0; return { sub, discount, post, total: sub - discount + post }; }
 function renderSummary() {
   $("sumList").innerHTML = Object.entries(cart).map(([id, q]) => { const p = byId[id]; return `<li class="sum-item"><span><b>${q}×</b> ${esc(fullTitle(p))}</span><span>${money(p.price * q)}</span></li>`; }).join("");
   const t = totals(), post = getMethod() === "post";
   $("sumSub").textContent = money(t.sub);
+  $("sumDealLine").hidden = !t.discount;
+  $("sumDealName").textContent = dealName(CONFIG.deal);
+  $("sumDeal").textContent = "−" + money(t.discount);
   $("sumShipLabel").textContent = post ? "Postage" : "Collection";
   $("sumShip").textContent = post ? money(CONFIG.postage) : "Free";
   $("sumTotal").textContent = money(t.total);
@@ -365,7 +376,7 @@ function buildOrder() {
     address: method === "post" ? F.address.value.trim() : null,
     notes: F.notes.value.trim(),
     items: Object.entries(cart).map(([id, q]) => ({ id, title: fullTitle(byId[id]), qty: q, price: byId[id].price })),
-    subtotal: t.sub, postage: t.post, total: t.total,
+    subtotal: t.sub, ...(t.discount ? { discount: t.discount, deal: dealName(CONFIG.deal) } : {}), postage: t.post, total: t.total,
     test: CONFIG.testMode
   };
 }
@@ -402,7 +413,7 @@ async function placeOrder(ev) {
   try {
     const { ok, data } = await postJson(CONFIG.orderApi, { name: order.name, phone: order.phone, method: order.method, collectDate: order.collectDate, address: order.address, notes: order.notes, items: order.items.map(i => ({ id: i.id, qty: i.qty })) });
     if (!ok) { const err = new Error(data.error || "bad status"); err.shown = !!data.error; throw err; }
-    const placed = { ...order, id: data.orderId || order.id, subtotal: data.subtotal ?? order.subtotal, postage: data.postage ?? order.postage, total: data.total ?? order.total, test: false, paid: false };
+    const placed = { ...order, id: data.orderId || order.id, subtotal: data.subtotal ?? order.subtotal, discount: data.discount ?? order.discount ?? 0, deal: order.deal || dealName(CONFIG.deal), postage: data.postage ?? order.postage, total: data.total ?? order.total, test: false, paid: false };
     if (data.paymentUrl) {
       store.set("flickers-pending-order", placed);
       window.location.href = data.paymentUrl;
@@ -436,6 +447,7 @@ function discordPreview(o) {
             ${o.method === "collect" ? `<div class="dc-field wide"><b>Collect on</b>${esc(fmtDate(o.collectDate))}, ${hoursText(CONFIG)}</div>` : `<div class="dc-field wide"><b>Post to</b>${escLines(o.address)}</div>`}
             <div class="dc-field wide"><b>Items</b>${items}</div>
             <div class="dc-field"><b>Subtotal</b>${money(o.subtotal)}</div>
+            ${o.discount ? `<div class="dc-field"><b>${esc(o.deal || "Deal")}</b>−${money(o.discount)}</div>` : ""}
             <div class="dc-field"><b>${o.method === "post" ? "Postage" : "Collection"}</b>${o.postage ? money(o.postage) : "Free"}</div>
             ${o.notes ? `<div class="dc-field wide"><b>Notes</b>${escLines(o.notes)}</div>` : ""}
           </div>
@@ -463,6 +475,7 @@ function showDone(o) {
         <dt>Phone</dt><dd>${esc(o.phone)}</dd>
         ${collect ? `<dt>Collect</dt><dd>${esc(fmtDate(o.collectDate))}, ${hoursText(CONFIG)}</dd>` : `<dt>Post to</dt><dd>${escLines(o.address)}</dd>`}
         <dt>Items</dt><dd>${o.items.map(i => `${i.qty} × ${esc(i.title)}`).join("<br>")}</dd>
+        ${o.discount ? `<dt>Deal</dt><dd>${esc(o.deal || "Deal")}: <strong>−${money(o.discount)}</strong></dd>` : ""}
         <dt>Total</dt><dd><strong>${money(o.total)}</strong>${o.postage ? ` <span class="hint">incl. ${money(o.postage)} postage</span>` : ""}</dd>
       </dl>
       <div class="next">
@@ -665,6 +678,7 @@ function trackHTML(o) {
     ${steps}
     <dl class="done-dl">
       <dt>Items</dt><dd>${o.items.map(i => `${i.qty} × ${esc(i.title)}`).join("<br>")}</dd>
+      ${o.discount ? `<dt>Deal</dt><dd>${esc(o.deal || "Deal")}: <strong>−${money(o.discount)}</strong></dd>` : ""}
       <dt>Total</dt><dd><strong>${money(o.total)}</strong>${o.postage ? ` <span class="hint">incl. ${money(o.postage)} postage</span>` : ""}</dd>
       <dt>Payment</dt><dd>${o.paid ? "Paid" : "Not paid yet"}</dd>
     </dl>

@@ -26,9 +26,9 @@ function csvCell(v) {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 function ordersCsv(orders) {
-  const head = ["Order", "Placed", "Status", "Paid", "Customer", "Phone", "Method", "Collect on", "Address", "Items", "Subtotal", "Postage", "Total", "Notes"];
+  const head = ["Order", "Placed", "Status", "Paid", "Customer", "Phone", "Method", "Collect on", "Address", "Items", "Subtotal", "Deal discount", "Postage", "Total", "Notes"];
   const rows = orders.map(o => [o.id, o.placedAt, STATUS_NAME(o), o.paid ? "Yes" : "No", o.name, o.phone, o.method === "post" ? "Post" : "Collect", o.collectDate || "", o.address || "",
-    o.items.map(i => `${i.qty} x ${i.title}`).join("; "), o.subtotal, o.postage, o.total, o.notes || ""]);
+    o.items.map(i => `${i.qty} x ${i.title}`).join("; "), o.subtotal, o.discount || 0, o.postage, o.total, o.notes || ""]);
   return "﻿" + [head, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 function download(name, text, type) {
@@ -55,6 +55,7 @@ function orderHTML(o, isOpen) {
       <dt>Phone</dt><dd>${esc(o.phone)}</dd>
       ${o.method === "collect" ? `<dt>Collect on</dt><dd>${esc(o.collectDate)}</dd>` : `<dt>Post to</dt><dd>${escLines(o.address)}</dd>`}
       <dt>Items</dt><dd>${o.items.map(i => `${i.qty} × ${esc(i.title)} · ${money(i.price * i.qty)}`).join("<br>")}</dd>
+      ${o.discount ? `<dt>Deal</dt><dd>${esc(o.deal || "Deal")}: −${money(o.discount)}</dd>` : ""}
       <dt>Total</dt><dd>${money(o.total)}${o.postage ? ` (incl. ${money(o.postage)} postage)` : ""}</dd>
       <dt>Payment</dt><dd>${o.paid ? "Paid" : "Not paid yet"}</dd>
       ${STOCK_NOTE[o.stock] ? `<dt>Stock</dt><dd>${STOCK_NOTE[o.stock]}</dd>` : ""}

@@ -4,11 +4,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { fullTitle, esc, placeholderCover } from "../src/shared.mjs";
+import { fullTitle, esc, placeholderCover, seriesKey } from "../src/shared.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "dist");
 const products = JSON.parse(fs.readFileSync(path.join(ROOT, "data/products.json"), "utf8"));
+/* titles with two or more issues get a series page */
+const series = [...products.reduce((m, p) => m.set(seriesKey(p), [...(m.get(seriesKey(p)) || []), p]), new Map()).values()].filter(l => l.length > 1);
 
 test("the site builds", () => {
   execFileSync(process.execPath, ["build/build.mjs"], { cwd: ROOT, stdio: "pipe", env: { ...process.env, ADMIN_API: "" } });
@@ -21,7 +23,7 @@ function htmlFiles(dir) {
 
 test("every page has a title, description and working local links", () => {
   const pages = htmlFiles(DIST).filter(f => !f.endsWith("404.html"));
-  assert.equal(pages.length, products.length + 2, "home + admin + one page per comic");
+  assert.equal(pages.length, products.length + 2 + (series.length ? series.length + 1 : 0), "home + admin + one page per comic + the series pages and their list");
   for (const file of pages) {
     const html = fs.readFileSync(file, "utf8");
     assert.match(html, /<title>[^<]+<\/title>/, file);
@@ -56,7 +58,7 @@ test("comic pages carry product data for search engines and link previews", () =
 
 test("sitemap lists every comic, robots keeps staff pages out", () => {
   const sm = fs.readFileSync(path.join(DIST, "sitemap.xml"), "utf8");
-  assert.equal((sm.match(/<loc>/g) || []).length, products.length + 1);
+  assert.equal((sm.match(/<loc>/g) || []).length, products.length + 1 + (series.length ? series.length + 1 : 0));
   assert.match(fs.readFileSync(path.join(DIST, "robots.txt"), "utf8"), /Disallow: .*\/admin\//);
 });
 
@@ -89,4 +91,22 @@ test("pages ask for no external resources the security policy would block", () =
 
 test("placeholder covers escape their text", () => {
   assert.ok(!placeholderCover({ id: "x", title: "<img onerror=1>", publisher: "A&B", stock: 1 }).includes("<img"));
+});
+
+test("series pages list every issue, and each issue links back to its series", () => {
+  assert.ok(series.length > 0, "the shop's data has at least one multi-issue title for this check");
+  const index = fs.readFileSync(path.join(DIST, "series/index.html"), "utf8");
+  for (const list of series) {
+    const slug = fs.readdirSync(path.join(DIST, "series")).find(d => d !== "index.html" && fs.readFileSync(path.join(DIST, "series", d, "index.html"), "utf8").includes(`data-id="${list[0].id}"`));
+    assert.ok(slug, `a series page exists for ${list[0].title}`);
+    const html = fs.readFileSync(path.join(DIST, "series", slug, "index.html"), "utf8");
+    for (const p of list) {
+      assert.ok(html.includes(`data-id="${p.id}"`), `${fullTitle(p)} is on its series page`);
+      assert.ok(fs.readFileSync(path.join(DIST, "comic", p.id, "index.html"), "utf8").includes(`href="../../series/${slug}/"`), `${fullTitle(p)} links to its series`);
+    }
+    assert.ok(index.includes(`href="../series/${slug}/"`), "the list links to it");
+  }
+  const single = products.find(p => !series.some(l => l.includes(p)));
+  assert.ok(!fs.readFileSync(path.join(DIST, "comic", single.id, "index.html"), "utf8").includes("See the whole series"), "a one-issue title has no series link");
+  assert.match(fs.readFileSync(path.join(DIST, "index.html"), "utf8"), /<a href="series\/">Series<\/a>/, "the menu links to the list");
 });

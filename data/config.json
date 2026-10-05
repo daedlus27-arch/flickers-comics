@@ -9,6 +9,7 @@
   "adminApi": "https://flickers-staff-api.flickers-comics.workers.dev",
   "orderApi": "https://flickers-staff-api.flickers-comics.workers.dev/orders",
   "payOnline": false,
+  "deal": { "enabled": true, "buy": 2, "free": 1 },
   "categories": [
     {
       "key": "all",

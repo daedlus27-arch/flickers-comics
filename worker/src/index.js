@@ -19,6 +19,7 @@
 import { HttpError, bad } from "./http.js";
 import { placeOrder, lookupOrder, listOrders, sendTestMessage, updateOrder } from "./orders.js";
 import { createWant, listWants, updateWant, deleteWant, announceRestocks, announceNewIssues } from "./wants.js";
+import { salesReport, reportParams } from "./sales.js";
 import { gh, readStock, branchName, serializeProducts, mergeStock } from "./github.js";
 
 const PBKDF2_ITERATIONS = 100000; // Cloudflare Workers allows at most 100,000
@@ -298,6 +299,7 @@ async function route(request, env) {
 
   if (method === "GET" && path === "/orders") return { ...(await listOrders(env, url.searchParams.get("cursor"))), ordersOpen: String(env.ORDERS_ENABLED) === "true", discord: !!env.DISCORD_WEBHOOK_URL };
   if (method === "POST" && path === "/orders/test") return sendTestMessage(env, user);
+  if (method === "GET" && path === "/report") { needOwner(user); return salesReport(env, reportParams(url)); }
   if (method === "GET" && path === "/wants") return listWants(env, url.searchParams.get("cursor"));
   const wm = /^\/wants\/([^/]+)$/.exec(path);
   if (wm && method === "POST") return updateWant(env, wm[1], await readJson(request), user);

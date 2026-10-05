@@ -88,6 +88,25 @@ export function searchItems(items, query) {
   return { mode: "none", flags: items.map(() => false) };
 }
 
+/* ---------- the deal: buy N, get M free (the cheapest comics are the free ones) ----------
+   lines: [{ price, qty }]. Every comic in the cart counts. Comics are lined up from dearest to cheapest and taken in groups of
+   buy + free; the last `free` of each group (the cheapest in it) cost nothing. Returns what comes off, how many are free,
+   and how many more comics the customer needs to add before the next free one appears. */
+export const dealOn = deal => !!(deal && deal.enabled && deal.buy >= 1 && deal.free >= 1);
+export const dealName = deal => (dealOn(deal) ? `Buy ${deal.buy}, get ${deal.free} free` : "");
+export function dealDiscount(lines, deal) {
+  const none = { discount: 0, freeUnits: 0, toGo: 0 };
+  if (!dealOn(deal)) return none;
+  const prices = [];
+  for (const l of lines) for (let i = 0; i < Math.min(Number(l.qty) || 0, 1000); i++) prices.push(Number(l.price) || 0);
+  prices.sort((a, b) => b - a);
+  const group = deal.buy + deal.free;
+  let discount = 0, freeUnits = 0;
+  prices.forEach((price, i) => { if (i % group >= deal.buy) { discount += price; freeUnits++; } });
+  const into = prices.length % group;
+  return { discount, freeUnits, toGo: into <= deal.buy ? deal.buy + 1 - into : group - into + deal.buy + 1 };
+}
+
 /* ---------- opening hours ---------- */
 export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export const hLabel = h => `${h % 12 || 12}${h < 12 ? "AM" : "PM"}`;

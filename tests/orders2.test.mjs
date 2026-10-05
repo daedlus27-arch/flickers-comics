@@ -140,7 +140,7 @@ test("a cancel that can't return the stock still cancels, and says so", async ()
 test("the Discord post is edited as the order moves, and staff are nudged when it's ready", async () => {
   const st = world(), env = baseEnv({ DISCORD_PING_ROLE: "123456789012345678" }), token = await staff(env);
   const { orderId } = await place(env, { name: "@everyone **Jamie**" });
-  assert.equal(st.discord.length, 1);
+  assert.equal(st.discord.filter(b => /^Order /.test(b.embeds[0].title)).length, 1, "one order post (the low-stock alert is separate)");
   assert.equal(stored(env)[0].discordId, "1000");
 
   let r = await j(await call(env, "POST", `/orders/${orderId}`, { status: "ready" }, token));
@@ -263,4 +263,26 @@ test("publishing from an out of date view merges instead of failing, and says so
   assert.equal(r.products.find(p => p.id === "flash-2").price, 650);
   assert.equal(stockOf(st, "batman-1"), 1);
   assert.equal(st.products.find(p => p.id === "flash-2").price, 650);
+});
+
+test("staff are told when an order leaves a comic with its last copy, or none", async () => {
+  const st = world(), env = baseEnv({ DISCORD_PING_ROLE: "123456789012345678" });
+  await place(env, { items: [{ id: "batman-1", qty: 2 }] }, "1.1.1.1"); // 3 -> 1
+  const alerts = () => st.discord.filter(b => b.embeds && /Stock running out|Sold out/.test(b.embeds[0].title));
+  assert.equal(alerts().length, 1);
+  assert.match(alerts()[0].embeds[0].description, /Batman #1[*][*]: last copy/);
+  assert.match(alerts()[0].content, /<@&123456789012345678>/, "pings the staff role");
+  assert.deepEqual(alerts()[0].allowed_mentions.roles, ["123456789012345678"]);
+
+  await place(env, { items: [{ id: "flash-2", qty: 1 }] }, "1.1.1.2"); // 5 -> 4: nothing to say
+  assert.equal(alerts().length, 1, "no alert for a comic that still has plenty");
+
+  await place(env, { items: [{ id: "one-left", qty: 1 }] }, "1.1.1.3"); // 1 -> 0
+  assert.equal(alerts().length, 2);
+  assert.equal(alerts()[1].embeds[0].title, "Sold out");
+  assert.match(alerts()[1].embeds[0].description, /Rare #9[*][*]: sold out/);
+
+  await place(env, { items: [{ id: "batman-1", qty: 1 }] }, "1.1.1.4"); // 1 -> 0, was already "last copy"
+  assert.equal(alerts().length, 3);
+  assert.match(alerts()[2].embeds[0].description, /Batman #1[*][*]: sold out/);
 });

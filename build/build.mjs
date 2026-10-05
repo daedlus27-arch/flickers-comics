@@ -7,8 +7,8 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import * as esbuild from "esbuild";
-import { fullTitle, coverName } from "../src/shared.mjs";
-import { page, homePage, comicPage, notFoundPage, DEFAULT_DESC } from "./templates.mjs";
+import { fullTitle, coverName, seriesKey, slug } from "../src/shared.mjs";
+import { page, homePage, comicPage, notFoundPage, seriesPage, seriesIndexPage, seriesUrl, DEFAULT_DESC } from "./templates.mjs";
 import { adminPage } from "./admin-page.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -129,8 +129,26 @@ for (const old of fs.readdirSync(CACHE)) if (!inUse.has(old)) fs.rmSync(path.joi
   await sharp(base).composite(layers).png({ palette: true, quality: 90, effort: 7 }).toFile(path.join(DIST, "assets", "og.png"));
 }
 
+/* ---------- series: titles with more than one issue get a page listing them all ---------- */
+const issueNo = p => { const m = String(p.num || p.vol || "").match(/\d+(\.\d+)?/); return m ? Number(m[0]) : Infinity; };
+const seriesMap = new Map();
+products.forEach(p => { const k = seriesKey(p); (seriesMap.get(k) || seriesMap.set(k, []).get(k)).push(p); });
+const seriesList = [];
+const slugsTaken = new Set();
+for (const [key, items] of seriesMap) {
+  if (items.length < 2) continue;
+  items.sort((a, b) => issueNo(a) - issueNo(b) || fullTitle(a).localeCompare(fullTitle(b)));
+  let sl = slug(items[0].title + (items[0].vol ? " " + items[0].vol : "")), n = 2; const base = sl;
+  while (slugsTaken.has(sl)) sl = `${base}-${n++}`;
+  slugsTaken.add(sl);
+  seriesList.push({ key, slug: sl, title: items[0].title + (items[0].vol ? " " + items[0].vol : ""), items });
+}
+seriesList.sort((a, b) => b.items.length - a.items.length || a.title.localeCompare(b.title));
+const seriesOf = {};
+seriesList.forEach(sr => sr.items.forEach(p => { seriesOf[p.id] = sr; }));
+
 /* ---------- pages ---------- */
-const ctxFor = root => ({ root, cfg, cats, products, featured: featuredRaw, groups, groupBy, groupKey });
+const ctxFor = root => ({ root, cfg, cats, products, featured: featuredRaw, groups, groupBy, groupKey, seriesOf, hasSeries: seriesList.length > 0 });
 const ogDefault = `${siteUrl}/assets/og.png`;
 const shell = (opts) => page({ cfg, fontPreload, fontCss, ...opts });
 
@@ -168,6 +186,25 @@ for (const p of products) {
   }));
 }
 
+// series pages, and the list of them
+if (seriesList.length) {
+  for (const sr of seriesList) {
+    const root = "../../";
+    const img = (sr.items.find(p => p.image) || {}).image;
+    wr(`series/${sr.slug}/index.html`, shell({
+      title: `${sr.title}: all issues | Flickers Comics`,
+      desc: `Every issue of ${sr.title} in stock at Flickers Comics: ${sr.items.map(p => p.num || p.vol).filter(Boolean).slice(0, 8).join(", ")}.`.slice(0, 200),
+      root, canonical: `${siteUrl}/series/${sr.slug}/`, ogImage: img ? `${siteUrl}/img/covers/${coverName(img)}-600.webp` : ogDefault,
+      jsonld: { "@context": "https://schema.org", "@type": "CollectionPage", name: sr.title, url: `${siteUrl}/series/${sr.slug}/`, hasPart: sr.items.map(p => ({ "@type": "Product", name: fullTitle(p), url: `${siteUrl}/comic/${p.id}/` })) },
+      body: seriesPage(sr, ctxFor(root))
+    }));
+  }
+  wr("series/index.html", shell({
+    title: "Series | Flickers Comics", desc: "Titles with more than one issue on the shelves at Flickers Comics, all in one place.",
+    root: "../", canonical: `${siteUrl}/series/`, ogImage: ogDefault, body: seriesIndexPage(seriesList, ctxFor("../"))
+  }));
+}
+
 // 404 (GitHub Pages serves this for unknown URLs, from the site root, so it must not use relative links)
 {
   const root = new URL(siteUrl + "/").pathname;
@@ -182,12 +219,12 @@ wr("admin/index.html", adminPage({ cfg, fontCss }));
 
 /* ---------- data for the browser, sitemap, robots ---------- */
 wr("data/shop.json", JSON.stringify({
-  config: { postage: cfg.postage, openHour: cfg.openHour, closeHour: cfg.closeHour, timeZone: cfg.timeZone, collectDaysAhead: cfg.collectDaysAhead, testMode: cfg.testMode, orderApi: cfg.orderApi || "", payOnline: !!cfg.payOnline },
+  config: { postage: cfg.postage, openHour: cfg.openHour, closeHour: cfg.closeHour, timeZone: cfg.timeZone, collectDaysAhead: cfg.collectDaysAhead, testMode: cfg.testMode, orderApi: cfg.orderApi || "", payOnline: !!cfg.payOnline, deal: cfg.deal || null },
   categories: cats, featured: featuredRaw, groupBy, products
 }));
 const today = new Date().toISOString().slice(0, 10);
 wr("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`
-  + [`${siteUrl}/`, ...products.map(p => `${siteUrl}/comic/${p.id}/`)].map(u => `  <url><loc>${u}</loc><lastmod>${today}</lastmod></url>`).join("\n") + `\n</urlset>\n`);
+  + [`${siteUrl}/`, ...(seriesList.length ? [`${siteUrl}/series/`, ...seriesList.map(sr => seriesUrl(siteUrl + "/", sr))] : []), ...products.map(p => `${siteUrl}/comic/${p.id}/`)].map(u => `  <url><loc>${u}</loc><lastmod>${today}</lastmod></url>`).join("\n") + `\n</urlset>\n`);
 wr("robots.txt", `User-agent: *\nAllow: /\nDisallow: ${new URL(siteUrl + "/").pathname}admin/\n\nSitemap: ${siteUrl}/sitemap.xml\n`);
 
-console.log(`Built ${products.length} comics, ${images.length} covers, ${groups.length} shelves (by ${groupBy}) into dist/`);
+console.log(`Built ${products.length} comics, ${images.length} covers, ${groups.length} shelves (by ${groupBy}), ${seriesList.length} series into dist/`);

@@ -7,6 +7,7 @@ import { app, API, $, S, hooks, sessionStore, api, say } from "./core.js";
 import { changeList, loadStock, renderStock, initCoverDrops } from "./stock.js";
 import { renderOrders } from "./orders.js";
 import { renderWanted } from "./wanted.js";
+import { renderSales } from "./sales.js";
 import { renderStaff, renderAccount } from "./staff.js";
 
 function showLogin(message = "") {
@@ -56,7 +57,8 @@ async function startApp() {
   renderShell();
 }
 
-const TABS = [["stock", "Stock"], ["orders", "Orders"], ["wanted", "Wanted"], ["staff", "Staff"], ["account", "My password"]];
+const OWNER_ONLY = ["sales", "staff"];
+const TABS = [["stock", "Stock"], ["orders", "Orders"], ["wanted", "Wanted"], ["sales", "Sales"], ["staff", "Staff"], ["account", "My password"]];
 async function showTab(key) {
   S.tab = key;
   if (S.tab === "stock" && S.draft.length && changeList().count === 0) { try { await loadStock(); } catch (e) { /* show what we already have */ } } // pick up stock that orders have used
@@ -70,7 +72,7 @@ function renderShell() {
       <div class="adm-who"><span>Signed in as <b>${esc(S.user.username)}</b>${owner ? " (owner)" : ""}</span><button type="button" class="link-btn" id="signOut">Sign out</button></div>
     </div>
     <div class="adm-tabs" role="tablist" aria-label="Staff area">
-      ${TABS.filter(([key]) => key !== "staff" || owner).map(([key, name]) => `<button type="button" class="adm-tab" role="tab" id="tab-${key}" data-tab="${key}" aria-selected="${S.tab === key}" aria-controls="panel" tabindex="${S.tab === key ? 0 : -1}">${name}</button>`).join("")}
+      ${TABS.filter(([key]) => !OWNER_ONLY.includes(key) || owner).map(([key, name]) => `<button type="button" class="adm-tab" role="tab" id="tab-${key}" data-tab="${key}" aria-selected="${S.tab === key}" aria-controls="panel" tabindex="${S.tab === key ? 0 : -1}">${name}</button>`).join("")}
     </div>
     <div class="adm-panel" id="panel" role="tabpanel" aria-labelledby="tab-${S.tab}"></div>
   </div>
@@ -92,6 +94,7 @@ function renderShell() {
   if (S.tab === "stock") renderStock();
   else if (S.tab === "orders") renderOrders();
   else if (S.tab === "wanted") renderWanted();
+  else if (S.tab === "sales" && owner) renderSales();
   else if (S.tab === "staff" && owner) renderStaff();
   else { S.tab = "account"; renderAccount(); }
 }

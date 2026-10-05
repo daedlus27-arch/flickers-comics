@@ -148,3 +148,20 @@ kbd{white-space:nowrap;padding:1px 6px;border:1px solid var(--rule);border-botto
 .want-who{margin-top:3px!important;font-size:14px;color:var(--ink-soft)}
 .want-who a{color:inherit}
 .want-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+
+/* ---------- sales tab ---------- */
+.sales-top{margin:6px 0 16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 26px}
+.stat{display:grid;gap:2px;padding:12px 14px;border:2px solid var(--ink);border-radius:6px;background:var(--paper-raised)}
+.stat-label{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
+.stat b{font-family:var(--font-display);font-weight:400;font-size:30px;line-height:1.1}
+.stat-note{font-size:13px;color:var(--ink-soft)}
+.sales-table{width:100%;margin:0 0 26px;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.sales-table caption{padding:0 0 8px;text-align:left;font-family:var(--font-display);font-size:24px;text-transform:uppercase}
+.sales-table th,.sales-table td{padding:8px 10px;border-bottom:1px solid var(--rule);text-align:left}
+.sales-table thead th{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+.sales-table tbody th{font-weight:700}
+.sales-bar{display:flex;align-items:center;gap:10px;min-width:200px}
+.sales-bar .bar{flex:none;display:block;height:14px;min-width:2px;border:1.5px solid var(--ink);border-radius:2px;background:var(--yellow)}
+.sales-timing{margin-bottom:6px}
+@media (max-width:640px){.sales-bar{min-width:0;flex-wrap:wrap}.sales-table th,.sales-table td{padding:8px 6px}}

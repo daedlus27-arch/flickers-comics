@@ -519,3 +519,18 @@ legend{margin-bottom:12px;padding:0;font-family:var(--font-display);font-size:24
   .price-tag{background:none;transform:none}
   a{color:inherit;text-decoration:none}
 }
+
+/* ---------- the deal ---------- */
+.deal-line{color:var(--ok);font-weight:700}
+.deal-line strong,.deal-line span:last-child{color:var(--ok)}
+.deal-nudge{margin:0;padding:8px 12px;border:2px dashed var(--ink);border-radius:4px;font-size:14px;font-weight:700}
+.deal-note{margin:0;font-size:14px;color:var(--ink-soft)}
+.deal-note b{color:var(--ok)}
+.strip-deal{font-weight:800}
+
+/* ---------- series pages ---------- */
+.series-head{margin:6px 0 26px}
+.series-head .section-sub{margin-top:6px}
+.series-follow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:16px 0 0}
+.series-link{margin:18px 0 0;font-size:15px;color:var(--ink-soft)}
+.series-link a{font-weight:700;color:var(--ink)}
